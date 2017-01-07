@@ -3,7 +3,9 @@
 from __future__ import absolute_import
 
 import click
+from . import artifacts
 from . import config
+from . import gitlab
 
 
 @click.group()
@@ -23,8 +25,14 @@ def configure(**kwargs):
 @main.command()
 def update():
     """Update latest tag/branch commits."""
-    click.echo('update')
 
+    c = config.guess_from_env() or config.load()
+    g = gitlab.Gitlab(**c)
+
+    a = artifacts.load()
+    for e in a:
+        e['commit'] = g.get_ref_commit(e['project'], e['ref'])
+    artifacts.save(a)
 
 @main.command()
 def download():

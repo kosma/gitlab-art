@@ -33,7 +33,7 @@ def load():
         return yaml.safe_load(stream=stream)
 
 
-def guess():
+def guess_from_env():
     if 'GITLAB_CI' in os.environ:
         # we have to jump through some hoops to get the API URL
         build_token = os.environ['CI_BUILD_TOKEN']
