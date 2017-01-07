@@ -34,6 +34,7 @@ def update():
         e['commit'] = g.get_ref_commit(e['project'], e['ref'])
     artifacts.save(a)
 
+
 @main.command()
 def download():
     """Download artifacts to local cache."""
