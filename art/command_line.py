@@ -6,15 +6,14 @@ import click
 def main():
     """Art, the Gitlab artifact repository client."""
 
-
 @main.command()
 def config():
     """Configure Gitlab URL and access token."""
     click.echo('config')
 
 @main.command()
-def fetch():
-    """Fetch latest tag/branch commits."""
+def update():
+    """Update latest tag/branch commits."""
     click.echo('update')
 
 @main.command()
