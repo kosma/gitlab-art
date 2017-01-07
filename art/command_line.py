@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import click
+from . import config
 
 
 @click.group()
@@ -11,9 +12,12 @@ def main():
 
 
 @main.command()
-def config():
+@click.argument('gitlab_url')
+@click.argument('private_token')
+def configure(**kwargs):
     """Configure Gitlab URL and access token."""
-    click.echo('config')
+
+    config.save(**kwargs)
 
 
 @main.command()
