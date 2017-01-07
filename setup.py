@@ -11,7 +11,8 @@ setup(
     packages=find_packages(),
     install_requires=[
         'click',
-        'requests'
+        'PyYAML',
+        'requests',
     ],
     entry_points={
         'console_scripts': [
