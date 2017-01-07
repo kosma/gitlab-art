@@ -10,8 +10,8 @@ setup(
     license='WTFPL',
     packages=find_packages(),
     install_requires=[
-        'click',
         'PyYAML',
+        'click',
         'requests',
     ],
     entry_points={
