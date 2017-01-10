@@ -7,30 +7,30 @@ into the build while keeping the system secure and clean.
 
 1. Create `artifacts.yml` with definitions of needed artifacts:
 
-```yaml
-- project: kosma/foobar-documentation
-  ref: branches/stable
-  build: doc
-  install:
-    build/apidoc/html: docs/api/
-    VERSION: docs/VERSION/
-- project: kosma/foobar-firmware
-  ref: tags/1.4.0
-  build: firmware-8051
-  install:
-    build/8051/release/firmware.bin: blogs/firmware-8051.blob
-- project: kosma/foobar-icons
-  ref: 69881ebc852f5e02b8328c6b9da615e90b7184b2
-  build: icons
-  install:
-    .: icons/
-```
+    ```yaml
+    - project: kosma/foobar-documentation
+      ref: branches/stable
+      build: doc
+      install:
+        build/apidoc/html: docs/api/
+        VERSION: docs/VERSION/
+    - project: kosma/foobar-firmware
+      ref: tags/1.4.0
+      build: firmware-8051
+      install:
+        build/8051/release/firmware.bin: blogs/firmware-8051.blob
+    - project: kosma/foobar-icons
+      ref: 69881ebc852f5e02b8328c6b9da615e90b7184b2
+      build: icons
+      install:
+        .: icons/
+    ```
 
 2. Create a Gitlab private token and save it in `art` configuration:
 
-```shell
-art config https://gitlab.example.com/ 'as1!df2@gh3#jk4$'
-```
+    ```shell
+    art config https://gitlab.example.com/ 'as1!df2@gh3#jk4$'
+    ```
 
 This only needs to be done once per your developer machine.
 
