@@ -94,4 +94,5 @@ ENV/
 .*.swp
 
 # this very project
-*.lock.yml
+artifacts.yml
+artifacts.lock.yml
