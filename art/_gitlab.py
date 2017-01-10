@@ -47,3 +47,11 @@ class Gitlab(object):
         # we don't raise exception to make it easier to differentiate between
         # "none found" and "something's fucked up"
         return None
+
+    def get_artifacts_zip(self, project, build_id):
+        """
+        Download artifacts archive.
+
+        """
+        r = self._get('/projects/%s/builds/%s/artifacts', quote(project), build_id)
+        return r.text

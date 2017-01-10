@@ -2,10 +2,12 @@
 
 from __future__ import absolute_import
 
+import sys
 import click
-from . import artifacts
-from . import config
-from . import gitlab
+from . import _config
+from . import _gitlab
+from . import _paths
+from . import _yaml
 
 
 @click.group()
@@ -19,26 +21,34 @@ def main():
 def configure(**kwargs):
     """Configure Gitlab URL and access token."""
 
-    config.save(**kwargs)
+    _config.save(**kwargs)
 
 
 @main.command()
 def update():
     """Update latest tag/branch commits."""
 
-    c = config.guess_from_env() or config.load()
-    g = gitlab.Gitlab(**c)
+    config = _config.guess_from_env() or _config.load()
+    gitlab = _gitlab.Gitlab(**config)
+    artifacts = _yaml.load(_paths.artifacts_file)
 
-    a = artifacts.load()
-    for e in a:
-        e['commit'] = g.get_ref_commit(e['project'], e['ref'])
-    artifacts.save(a)
+    for entry in artifacts:
+        entry['commit'] = gitlab.get_ref_commit(entry['project'], entry['ref'])
+        click.echo('* %s: %s => %s' % (entry['project'], entry['ref'], entry['commit']), sys.stderr)
+
+    _yaml.save(_paths.artifacts_lock_file, artifacts)
 
 
 @main.command()
 def download():
     """Download artifacts to local cache."""
-    click.echo('download')
+
+    config = _config.guess_from_env() or _config.load()
+    gitlab = _gitlab.Gitlab(**config)
+    artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
+
+    for entry in artifacts_lock:
+        pass
 
 
 @main.command()
