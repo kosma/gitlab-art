@@ -75,6 +75,23 @@ to needed build artifacts. Your private token is never transmitted to the CI sys
 and cache files. When running under CI environment, the default cache directory is
 automatically set to `.art-cache` so it can be preserved across builds.
 
+## Bugs and limitations
+
+* Multiple Gitlab projects are not supported.
+* Error handling is very rudimentary: any non-tribial exceptions simply propagate
+  until Python dumps a stack trace.
+* Logging could be improved.
+* Format of the `artifacts.yml` file is not checked and is barely documented.
+* Some breakage may occur with non-trivial use cases.
+* Like with any other build system, security depends on trusting the developer
+  not to do anything stupid.
+* There is no `uninstall` command. If you changed artifact versions and need to
+  have a clean slate, it's highly recommended to run `git clean -dfx` (beware,
+  however: any local changes to your working copy will be lost without warning).
+* There are probably cleaner solutions to this problem, like using some sort of
+  cross-language package manager; however, I didn't find any that would satisfy
+  my needs.
+
 ## Licensing
 
 `art` is open source software; see ``COPYING`` for amusement. Email me if the
