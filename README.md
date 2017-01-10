@@ -21,7 +21,7 @@ into the build while keeping the system secure and clean.
       build: doc
       install:
         build/apidoc/html: docs/api/
-        VERSION: docs/VERSION/
+        VERSION: docs/VERSION
     - project: kosma/foobar-firmware
       ref: tags/1.4.0
       build: firmware-8051
