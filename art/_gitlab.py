@@ -20,10 +20,12 @@ class Gitlab(object):
 
     def get_ref_commit(self, project, ref):
         """
-        Retrieve SHA1 for given ref. Refs must be given in form of tags/name
-        or branches/name.
+        Retrieve SHA1 for given ref. Refs must be given in form of tags/name,
+        branches/name or full-length SHA1.
 
         """
+        if len(ref) == 40 and not '/' in ref:
+            return ref
         # percent-quote the tag/branch name but not the separating slash itself
         kind, slash, name = ref.partition('/')
         ref = kind + slash + quote(name)
