@@ -5,7 +5,15 @@ into the build while keeping the system secure and clean.
 
 ## Quickstart
 
-1. Create `artifacts.yml` with definitions of needed artifacts:
+1. Create a Gitlab private token and save it in `art` configuration:
+
+    ```shell
+    art config https://gitlab.example.com/ 'as1!df2@gh3#jk4$'
+    ```
+
+   This only needs to be done once per your developer machine.
+
+2. Create `artifacts.yml` with definitions of needed artifacts:
 
     ```yaml
     - project: kosma/foobar-documentation
@@ -25,14 +33,6 @@ into the build while keeping the system secure and clean.
       install:
         .: icons/
     ```
-
-2. Create a Gitlab private token and save it in `art` configuration:
-
-    ```shell
-    art config https://gitlab.example.com/ 'as1!df2@gh3#jk4$'
-    ```
-
-   This only needs to be done once per your developer machine.
 
 3. Run `art update` to automatically determine latest versions and build numbers
    of needed projects and save them into `artifacts.lock.yml`. Commit both files
