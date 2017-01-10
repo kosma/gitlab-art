@@ -2,7 +2,6 @@
 
 from __future__ import absolute_import
 
-import fnmatch
 import os
 import shutil
 import sys
@@ -66,7 +65,7 @@ def download():
     for entry in artifacts_lock:
         filename = '%s/%s.zip' % (entry['project'], entry['build_id'])
         try:
-            archive = _cache.get(filename)
+            _cache.get(filename)
         except KeyError:
             click.echo('* %s: %s => downloading...' % (entry['project'], entry['build_id']))
             artifacts_zip = gitlab.get_artifacts_zip(entry['project'], entry['build_id'])
@@ -80,37 +79,35 @@ def download():
 def install():
     """Install artifacts to current directory."""
 
-    config = _config.guess_from_env() or _config.load()
-    gitlab = _gitlab.Gitlab(**config)
     _paths.check_artifacts_lock_file()
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
         # convert the "install" dictionary to list of (match, translate)
-        install = []
+        installs = []
         for source, destination in entry['install'].iteritems():
             # Nb. Defaults parameters on lambda are required due to derpy
-            # Python closure semantics (scope capture).
+            #     Python closure semantics (scope capture).
             if source == '.':
                 # "copy all" filter
-                install.append((
+                installs.append((
                     lambda f, s=source, d=destination: True,
                     lambda f, s=source, d=destination: os.path.join(d, f)
                 ))
             elif source.endswith('/'):
                 # 1:1 directory filter
-                install.append((
+                installs.append((
                     lambda f, s=source, d=destination: f.startswith(s),
                     lambda f, s=source, d=destination: os.path.join(d, f[len(s):])
                 ))
             else:
                 # 1:1 file filter
-                install.append((
+                installs.append((
                     lambda f, s=source, d=destination: f == s,
                     lambda f, s=source, d=destination: d
                 ))
         # make sure there are no bugs in the lambdas above
-        del source, destination
+        del source, destination # pylint: disable=undefined-loop-variable
 
         # open the artifacts.zip archive
         filename = '%s/%s.zip' % (entry['project'], entry['build_id'])
@@ -119,7 +116,7 @@ def install():
 
         # iterate over the zip archive
         for member in archive.namelist():
-            for match, translate in install:
+            for match, translate in installs:
                 if match(member):
                     target = translate(member)
                     click.echo('* install: %s => %s' % (member, target))
