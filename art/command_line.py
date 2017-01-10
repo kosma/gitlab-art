@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 import sys
 import click
+from . import _cache
 from . import _config
 from . import _gitlab
 from . import _paths
@@ -50,7 +51,12 @@ def download():
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
-        pass
+        filename = '%s/%s.zip' % (entry['project'], entry['build_id'])
+        try:
+            archive = _cache.get(filename)
+        except KeyError:
+            archive = gitlab.get_artifacts_zip(entry['project'], entry['build_id'])
+            _cache.save(filename, archive)
 
 
 @main.command()
