@@ -34,7 +34,9 @@ def update():
 
     for entry in artifacts:
         entry['commit'] = gitlab.get_ref_commit(entry['project'], entry['ref'])
-        click.echo('* %s: %s => %s' % (entry['project'], entry['ref'], entry['commit']), sys.stderr)
+        entry['build_id'] = gitlab.get_commit_last_successful_build(entry['project'], entry['commit'], entry['build'])
+        click.echo('* %s: %s => %s => %s' % (
+            entry['project'], entry['ref'], entry['commit'], entry['build_id']), sys.stderr)
 
     _yaml.save(_paths.artifacts_lock_file, artifacts)
 
