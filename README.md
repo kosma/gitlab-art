@@ -58,7 +58,7 @@ Add the following commands to your `.gitlab-ci.yml`:
 
 ```yaml
 before_script:
-  - sudo pip install http://gitlab.com/kosma/art
+  - sudo pip install https://github.com/kosma/art
   - art download
   - art install
 ```
