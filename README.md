@@ -20,7 +20,7 @@ into the build while keeping the system secure and clean.
   install:
     build/8051/release/firmware.bin: blogs/firmware-8051.blob
 - project: kosma/foobar-icons
-  ref: branches/master
+  ref: 69881ebc852f5e02b8328c6b9da615e90b7184b2
   build: icons
   install:
     .: icons/
