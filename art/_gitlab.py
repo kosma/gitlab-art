@@ -54,4 +54,4 @@ class Gitlab(object):
 
         """
         r = self._get('/projects/%s/builds/%s/artifacts', quote(project), build_id)
-        return r.text
+        return r.content
