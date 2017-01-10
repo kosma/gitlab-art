@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import sys
+import zipfile
 import click
 from . import _cache
 from . import _config
@@ -56,8 +57,8 @@ def download():
             archive = _cache.get(filename)
         except KeyError:
             click.echo('* %s: %s => downloading...' % (entry['project'], entry['build_id']))
-            archive = gitlab.get_artifacts_zip(entry['project'], entry['build_id'])
-            _cache.save(filename, archive)
+            artifacts_zip = gitlab.get_artifacts_zip(entry['project'], entry['build_id'])
+            _cache.save(filename, artifacts_zip)
             click.echo('* %s: %s => downloaded.' % (entry['project'], entry['build_id']))
         else:
             click.echo('* %s: %s => present' % (entry['project'], entry['build_id']))
@@ -66,4 +67,12 @@ def download():
 @main.command()
 def install():
     """Install artifacts to current directory."""
-    click.echo('install')
+
+    config = _config.guess_from_env() or _config.load()
+    gitlab = _gitlab.Gitlab(**config)
+    artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
+
+    for entry in artifacts_lock:
+        filename = '%s/%s.zip' % (entry['project'], entry['build_id'])
+        archive_file = _cache.get(filename)
+        archive = zipfile.ZipFile(archive_file)
