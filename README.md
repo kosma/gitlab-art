@@ -61,6 +61,9 @@ before_script:
   - sudo pip install https://github.com/kosma/art
   - art download
   - art install
+cache:
+  paths:
+    - .art-cache/
 ```
 
 `art` uses Gitlab's `$CI_BUILD_TOKEN` infrastructure to automatically gain access
@@ -69,7 +72,8 @@ to needed build artifacts. Your private token is never transmitted to the CI sys
 ## File locations
 
 `art` uses [appdirs](https://github.com/ActiveState/appdirs) to store configuration
-and cache files.
+and cache files. When running under CI environment, the default cache directory is
+automatically set to `.art-cache` so it can be preserved across builds.
 
 ## Licensing
 

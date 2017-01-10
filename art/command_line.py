@@ -16,8 +16,16 @@ from . import _yaml
 
 
 @click.group()
-def main():
+@click.option('--cache', '-c', help='Download cache directory.')
+def main(cache):
     """Art, the Gitlab artifact repository client."""
+
+    # we change the default when running under CI...
+    if 'GITLAB_CI' in os.environ:
+        _paths.cache_dir = '.art-cache'
+    # ...but command-line options always take precedence
+    if cache is not None:
+        _paths.cache_dir = cache
 
 
 @main.command()
