@@ -55,8 +55,12 @@ def download():
         try:
             archive = _cache.get(filename)
         except KeyError:
+            click.echo('* %s: %s => downloading...' % (entry['project'], entry['build_id']))
             archive = gitlab.get_artifacts_zip(entry['project'], entry['build_id'])
             _cache.save(filename, archive)
+            click.echo('* %s: %s => downloaded.' % (entry['project'], entry['build_id']))
+        else:
+            click.echo('* %s: %s => present' % (entry['project'], entry['build_id']))
 
 
 @main.command()
