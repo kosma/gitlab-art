@@ -41,6 +41,17 @@ This only needs to be done once per your developer machine.
 4. Run `art download` to fetch required artifacts to your local cache and
    `art install` to install them to the project directory.
 
+## The Lockfile
+
+The `artifacts.lock.yml` is conceptually similar to Ruby's `Gemfile.lock`: it
+allows locking to exact revisions and builds while still semantically tracking
+tags or branches and allowing easy updates when needs arise. The following good
+practices should be followed:
+
+* Always run `art update` after editing `artifacts.yml`.
+* Always commit both files to version control.
+* Do not run `art update` automatically unless you enjoy breaking the build.
+
 ## Continuous integration
 
 Add the following commands to your `.gitlab-ci.yml`:
