@@ -2,6 +2,9 @@
 
 from __future__ import absolute_import
 
+import fnmatch
+import os
+import shutil
 import sys
 import zipfile
 import click
@@ -73,6 +76,45 @@ def install():
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
+        # convert the "install" dictionary to list of (match, translate)
+        install = []
+        for source, destination in entry['install'].iteritems():
+            # Nb. Defaults parameters on lambda are required due to derpy
+            # Python closure semantics (scope capture).
+            if source == '.':
+                # "copy all" filter
+                install.append((
+                    lambda f, s=source, d=destination: True,
+                    lambda f, s=source, d=destination: os.path.join(d, f)
+                ))
+            elif source.endswith('/'):
+                # 1:1 directory filter
+                install.append((
+                    lambda f, s=source, d=destination: f.startswith(s),
+                    lambda f, s=source, d=destination: os.path.join(d, f[len(s):])
+                ))
+            else:
+                # 1:1 file filter
+                install.append((
+                    lambda f, s=source, d=destination: f == s,
+                    lambda f, s=source, d=destination: d
+                ))
+        # make sure there are no bugs in the lambdas above
+        del source, destination
+
+        # open the artifacts.zip archive
         filename = '%s/%s.zip' % (entry['project'], entry['build_id'])
         archive_file = _cache.get(filename)
         archive = zipfile.ZipFile(archive_file)
+
+        # iterate over the zip archive
+        for member in archive.namelist():
+            for match, translate in install:
+                if match(member):
+                    target = translate(member)
+                    click.echo('* install: %s => %s' % (member, target))
+                    if os.sep in target:
+                        _paths.mkdirs(os.path.dirname(target))
+                    with archive.open(member) as fmember:
+                        with open(target, 'wb') as ftarget:
+                            shutil.copyfileobj(fmember, ftarget)
