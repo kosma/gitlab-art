@@ -77,7 +77,7 @@ automatically set to `.art-cache` so it can be preserved across builds.
 
 ## Bugs and limitations
 
-* Multiple Gitlab projects are not supported.
+* Multiple Gitlab instances are not supported (and would be non-trivial to support).
 * Error handling is very rudimentary: any non-tribial exceptions simply propagate
   until Python dumps a stack trace.
 * Logging could be improved.
