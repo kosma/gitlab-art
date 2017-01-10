@@ -18,9 +18,10 @@ def save(filename, content):
 
 def get(filename):
     try:
-        with open(os.path.join(_paths.cache_dir, filename), 'rb') as stream:
-            return stream.read()
+        return open(os.path.join(_paths.cache_dir, filename), 'rb')
     except IOError as exc:
+        # translate "No such file or directory" into KeyError
         if exc.errno == errno.ENOENT:
             raise KeyError(filename)
-        raise
+        else:
+            raise
