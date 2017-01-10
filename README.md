@@ -78,13 +78,14 @@ automatically set to `.art-cache` so it can be preserved across builds.
 ## Bugs and limitations
 
 * Multiple Gitlab instances are not supported (and would be non-trivial to support).
-* Error handling is very rudimentary: any non-tribial exceptions simply propagate
+* Error handling is very rudimentary: any non-trivial exceptions simply propagate
   until Python dumps a stack trace.
 * Logging could be improved.
 * Format of the `artifacts.yml` file is not checked and is barely documented.
 * Some breakage may occur with non-trivial use cases.
 * Like with any other build system, security depends on trusting the developer
-  not to do anything stupid.
+  not to do anything stupid. In particular, paths are not sanitized; with enough
+  ingenuity one could probably escape the build directory and wreak havoc.
 * There is no `uninstall` command. If you changed artifact versions and need to
   have a clean slate, it's highly recommended to run `git clean -dfx` (beware,
   however: any local changes to your working copy will be lost without warning).
