@@ -1,7 +1,6 @@
 # art - Gitlab artifact repository client
 
-`art` solves a burning problem of pulling artifacts from different repositories
-into the build while keeping the system secure and clean.
+`art` solves a burning problem of pulling artifacts from different repositories.
 
 ## Quickstart
 
@@ -10,8 +9,6 @@ into the build while keeping the system secure and clean.
     ```shell
     art config https://gitlab.example.com/ 'as1!df2@gh3#jk4$'
     ```
-
-   This only needs to be done once per your developer machine.
 
 2. Create `artifacts.yml` with definitions of needed artifacts:
 
@@ -59,15 +56,13 @@ Add the following commands to your `.gitlab-ci.yml`:
 ```yaml
 before_script:
   - sudo pip install https://github.com/kosma/art
+  - art configure 
   - art download
   - art install
 cache:
   paths:
     - .art-cache/
 ```
-
-`art` uses Gitlab's `$CI_BUILD_TOKEN` infrastructure to automatically gain access
-to needed build artifacts. Your private token is never transmitted to the CI system.
 
 ## File locations
 
@@ -77,6 +72,9 @@ automatically set to `.art-cache` so it can be preserved across builds.
 
 ## Bugs and limitations
 
+* Gitlab's `$CI_BUILD_TOKEN` infrastructure doesn't support accessing artifacts,
+  so a private token must be used. This is very unfortunate and kludgey.
+  This might be fixed in future Gitlab releases (if I bug them hard enough).
 * Multiple Gitlab instances are not supported (and would be non-trivial to support).
 * Error handling is very rudimentary: any non-trivial exceptions simply propagate
   until Python dumps a stack trace.

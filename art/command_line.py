@@ -40,7 +40,7 @@ def configure(**kwargs):
 def update():
     """Update latest tag/branch commits."""
 
-    config = _config.guess_from_env() or _config.load()
+    config = _config.load()
     gitlab = _gitlab.Gitlab(**config)
     artifacts = _yaml.load(_paths.artifacts_file)
 
@@ -57,7 +57,7 @@ def update():
 def download():
     """Download artifacts to local cache."""
 
-    config = _config.guess_from_env() or _config.load()
+    config = _config.load()
     gitlab = _gitlab.Gitlab(**config)
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
