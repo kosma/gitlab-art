@@ -59,7 +59,6 @@ def download():
 
     config = _config.guess_from_env() or _config.load()
     gitlab = _gitlab.Gitlab(**config)
-    _paths.check_artifacts_lock_file()
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
@@ -79,7 +78,6 @@ def download():
 def install():
     """Install artifacts to current directory."""
 
-    _paths.check_artifacts_lock_file()
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:

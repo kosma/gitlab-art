@@ -22,17 +22,3 @@ def mkdirs(path):
     except OSError as exc:
         if exc.errno != errno.EEXIST:
             raise
-
-
-def check_artifacts_lock_file():
-    """
-    Ensure that the 'lock' file exists and is fresh.
-
-    """
-    argv0 = os.path.basename(sys.argv[0])
-    if not os.path.exists(artifacts_lock_file):
-        print >>sys.stderr, "Error: lock file does not exist. Please run '%s update'." % argv0
-        sys.exit(1)
-    if os.path.getmtime(artifacts_file) > os.path.getmtime(artifacts_lock_file):
-        print >>sys.stderr, "Error: lock file is out of date. Please run '%s update'." % argv0
-        sys.exit(1)
