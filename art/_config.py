@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+import re
 import os
 from . import _paths
 from . import _yaml
@@ -34,10 +35,11 @@ def guess_from_env():
         if not project_url.endswith(project_path):
             raise ValueError("%r doesn't end with %r" % (project_url, project_path))
         gitlab_url = project_url[:-len(project_path)]
+        gitlab_url = re.sub('^(https?://)', '\\1gitlab-ci-token:%s@' % build_token, gitlab_url)
         # the rest is simple
         config = {
             'gitlab_url': gitlab_url,
-            'auth_header': {'BUILD-TOKEN': build_token}
+            'auth_header': {}
         }
         return config
     else:
