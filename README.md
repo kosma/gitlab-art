@@ -20,7 +20,7 @@ into the build while keeping the system secure and clean.
       ref: branches/stable
       build: doc
       install:
-        build/apidoc/html: docs/api/
+        build/apidoc/html/: docs/api/
         VERSION: docs/VERSION
     - project: kosma/foobar-firmware
       ref: tags/1.4.0
