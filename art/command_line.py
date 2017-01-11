@@ -116,6 +116,9 @@ def install():
 
         # iterate over the zip archive
         for member in archive.namelist():
+            if member.endswith('/'):
+                # skip directories, they will be created as-is
+                continue
             for match, translate in installs:
                 if match(member):
                     target = translate(member)
