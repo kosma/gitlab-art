@@ -1,4 +1,4 @@
-# art - Gitlab artifact repository client
+# art - cross-project Gitlab artifact dependencies
 
 `art` solves a burning problem of pulling artifacts from different repositories.
 
