@@ -7,7 +7,7 @@
 1. Create a Gitlab private token and save it in `art` configuration:
 
     ```shell
-    art config https://gitlab.example.com/ 'as1!df2@gh3#jk4$'
+    art configure https://gitlab.example.com/ 'as1!df2@gh3#jk4$'
     ```
 
 2. Create `artifacts.yml` with definitions of needed artifacts:
@@ -56,7 +56,7 @@ Add the following commands to your `.gitlab-ci.yml`:
 ```yaml
 before_script:
   - sudo pip install https://github.com/kosma/art
-  - art configure 
+  - art configure <url> <token>
   - art download
   - art install
 cache:
