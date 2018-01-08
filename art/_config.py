@@ -8,10 +8,11 @@ from . import _paths
 from . import _yaml
 
 
-def save(gitlab_url, private_token):
+def save(gitlab_url, private_token, verify_ssl):
     config = {
         'gitlab_url': gitlab_url,
-        'auth_header': {'PRIVATE-TOKEN': private_token}
+        'auth_header': {'PRIVATE-TOKEN': private_token},
+        'verify_ssl': verify_ssl
     }
     _paths.mkdirs(os.path.dirname(_paths.config_file))
     _yaml.save(_paths.config_file, config)

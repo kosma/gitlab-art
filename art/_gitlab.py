@@ -9,12 +9,13 @@ def quote(url):
 
 class Gitlab(object):
 
-    def __init__(self, gitlab_url, auth_header):
+    def __init__(self, gitlab_url, auth_header, verify_ssl):
         self.api_url = gitlab_url + '/api/v3'
         self.headers = auth_header
+        self.verify = False if verify_ssl == 'False' else True
 
     def _get(self, request, *args, **kwargs):
-        r = requests.get(self.api_url + request % args, headers=self.headers, **kwargs)
+        r = requests.get(self.api_url + request % args, headers=self.headers, verify=self.verify, **kwargs)
         r.raise_for_status()
         return r
 
