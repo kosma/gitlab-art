@@ -83,7 +83,7 @@ def install():
     for entry in artifacts_lock:
         # convert the "install" dictionary to list of (match, translate)
         installs = []
-        for source, destination in entry['install'].iteritems():
+        for source, destination in entry['install'].items():
             # Nb. Defaults parameters on lambda are required due to derpy
             #     Python closure semantics (scope capture).
             if source == '.':
