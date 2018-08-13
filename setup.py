@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='art',
-    version='0.1.0',
+    version='0.1.1',
     description='Gitlab artifact manager',
     url='https://github.com/kosma/art',
     author='Kosma Moczek',
