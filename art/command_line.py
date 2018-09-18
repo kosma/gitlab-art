@@ -30,6 +30,7 @@ def main(cache):
 @main.command()
 @click.argument('gitlab_url')
 @click.argument('private_token')
+@click.argument('verify_ssl')
 def configure(**kwargs):
     """Configure Gitlab URL and access token."""
 
