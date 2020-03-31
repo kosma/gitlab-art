@@ -31,6 +31,9 @@ def get_commit_last_successful_job(project, commit, job_name):
         job_name, commit))
 
 
+def zip_name(project, job_id):
+    return os.path.join(project, '{}.zip'.format(job_id))
+
 
 @click.group()
 @click.option('--cache', '-c', help='Download cache directory.')
@@ -79,7 +82,7 @@ def download():
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
-        filename = '%s/%s.zip' % (entry['project'], entry['job_id'])
+        filename = zip_name(entry['project'], entry['job_id'])
         try:
             _cache.get(filename)
         except KeyError:
@@ -127,7 +130,7 @@ def install():
         del source, destination # pylint: disable=undefined-loop-variable
 
         # open the artifacts.zip archive
-        filename = '%s/%s.zip' % (entry['project'], entry['job_id'])
+        filename = zip_name(entry['project'], entry['job_id'])
         archive_file = _cache.get(filename)
         archive = zipfile.ZipFile(archive_file)
 
