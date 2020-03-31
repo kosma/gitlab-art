@@ -8,7 +8,7 @@ import appdirs
 _appdirs = appdirs.AppDirs('art')
 artifacts_file = 'artifacts.yml'
 artifacts_lock_file = 'artifacts.lock.yml'
-config_file = os.path.join(_appdirs.user_data_dir, 'config.yml')
+config_file = os.path.join(_appdirs.user_config_dir, 'config.yml')
 cache_dir = _appdirs.user_cache_dir
 
 
