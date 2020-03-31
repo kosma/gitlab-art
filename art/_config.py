@@ -11,7 +11,7 @@ from . import _yaml
 def save(gitlab_url, private_token):
     config = {
         'gitlab_url': gitlab_url,
-        'auth_header': {'PRIVATE-TOKEN': private_token}
+        'private_token': private_token,
     }
     _paths.mkdirs(os.path.dirname(_paths.config_file))
     _yaml.save(_paths.config_file, config)
