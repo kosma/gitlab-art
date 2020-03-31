@@ -67,7 +67,7 @@ def update():
     for entry in artifacts:
         proj = gitlab.projects.get(entry['project'])
         entry['commit'] = proj.commits.get(entry['ref']).id
-        entry['job_id'] = get_commit_last_successful_job(proj, entry['commit'], entry['build']).id
+        entry['job_id'] = get_commit_last_successful_job(proj, entry['commit'], entry['job']).id
         click.echo('* %s: %s => %s => %s' % (
             entry['project'], entry['ref'], entry['commit'], entry['job_id']), sys.stderr)
 

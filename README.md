@@ -15,23 +15,23 @@
     ```yaml
     - project: kosma/foobar-documentation
       ref: branches/stable
-      build: doc
+      job: doc
       install:
         build/apidoc/html/: docs/api/
         VERSION: docs/VERSION
     - project: kosma/foobar-firmware
       ref: tags/1.4.0
-      build: firmware-8051
+      job: firmware-8051
       install:
         build/8051/release/firmware.bin: blobs/firmware-8051.blob
     - project: kosma/foobar-icons
       ref: 69881ebc852f5e02b8328c6b9da615e90b7184b2
-      build: icons
+      job: icons
       install:
         .: icons/
     ```
 
-3. Run `art update` to automatically determine latest versions and build numbers
+3. Run `art update` to automatically determine latest versions and job numbers
    of needed projects and save them into `artifacts.lock.yml`. Commit both files
    to version control system.
 
@@ -41,7 +41,7 @@
 ## The Lockfile
 
 The `artifacts.lock.yml` is conceptually similar to Ruby's `Gemfile.lock`: it
-allows locking to exact revisions and builds while still semantically tracking
+allows locking to exact revisions and jobs while still semantically tracking
 tags or branches and allowing easy updates when needs arise. The following good
 practices should be followed:
 
@@ -68,7 +68,7 @@ cache:
 
 `art` uses [appdirs](https://github.com/ActiveState/appdirs) to store configuration
 and cache files. When running under CI environment, the default cache directory is
-automatically set to `.art-cache` so it can be preserved across builds.
+automatically set to `.art-cache` so it can be preserved across jobs.
 
 ## Bugs and limitations
 
