@@ -64,9 +64,9 @@ def update():
     for entry in artifacts:
         proj = gitlab.projects.get(entry['project'])
         entry['commit'] = proj.commits.get(entry['ref']).id
-        entry['build_id'] = get_commit_last_successful_job(proj, entry['commit'], entry['build']).id
+        entry['job_id'] = get_commit_last_successful_job(proj, entry['commit'], entry['build']).id
         click.echo('* %s: %s => %s => %s' % (
-            entry['project'], entry['ref'], entry['commit'], entry['build_id']), sys.stderr)
+            entry['project'], entry['ref'], entry['commit'], entry['job_id']), sys.stderr)
 
     _yaml.save(_paths.artifacts_lock_file, artifacts)
 
@@ -79,18 +79,18 @@ def download():
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
-        filename = '%s/%s.zip' % (entry['project'], entry['build_id'])
+        filename = '%s/%s.zip' % (entry['project'], entry['job_id'])
         try:
             _cache.get(filename)
         except KeyError:
-            click.echo('* %s: %s => downloading...' % (entry['project'], entry['build_id']))
+            click.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
             proj = gitlab.projects.get(entry['project'])
-            job = proj.jobs.get(entry['build_id'], lazy=True)
+            job = proj.jobs.get(entry['job_id'], lazy=True)
             with _cache.save_file(filename) as f:
                 job.artifacts(streamed=True, action=f.write)
-            click.echo('* %s: %s => downloaded.' % (entry['project'], entry['build_id']))
+            click.echo('* %s: %s => downloaded.' % (entry['project'], entry['job_id']))
         else:
-            click.echo('* %s: %s => present' % (entry['project'], entry['build_id']))
+            click.echo('* %s: %s => present' % (entry['project'], entry['job_id']))
 
 
 @main.command()
@@ -127,7 +127,7 @@ def install():
         del source, destination # pylint: disable=undefined-loop-variable
 
         # open the artifacts.zip archive
-        filename = '%s/%s.zip' % (entry['project'], entry['build_id'])
+        filename = '%s/%s.zip' % (entry['project'], entry['job_id'])
         archive_file = _cache.get(filename)
         archive = zipfile.ZipFile(archive_file)
 
