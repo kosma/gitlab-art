@@ -7,11 +7,32 @@ import shutil
 import sys
 import zipfile
 import click
+from gitlab import Gitlab
 from . import _cache
 from . import _config
-from . import _gitlab
 from . import _paths
 from . import _yaml
+
+def get_gitlab():
+    config = _config.load()
+    return Gitlab(config['gitlab_url'], private_token=config['private_token'])
+
+
+def get_commit_last_successful_job(project, commit, job_name):
+    pipelines = project.pipelines.list(as_list=False, sha=commit, order_by='id', sort='desc')
+    for pipeline in pipelines:
+        jobs = pipeline.jobs.list(as_list=False, scope='success')
+        for job in jobs:
+            if job.name == job_name:
+                # Turn ProjectPipelineJob into ProjectJob
+                return project.jobs.get(job.id, lazy=True)
+
+    raise Exception("Could not find latest successful '{}' job for commit {}".format(
+        job_name, commit))
+
+
+def zip_name(project, job_id):
+    return os.path.join(project, '{}.zip'.format(job_id))
 
 
 @click.group()
@@ -40,15 +61,15 @@ def configure(**kwargs):
 def update():
     """Update latest tag/branch commits."""
 
-    config = _config.load()
-    gitlab = _gitlab.Gitlab(**config)
+    gitlab = get_gitlab()
     artifacts = _yaml.load(_paths.artifacts_file)
 
     for entry in artifacts:
-        entry['commit'] = gitlab.get_ref_commit(entry['project'], entry['ref'])
-        entry['build_id'] = gitlab.get_commit_last_successful_build(entry['project'], entry['commit'], entry['build'])
+        proj = gitlab.projects.get(entry['project'])
+        entry['commit'] = proj.commits.get(entry['ref']).id
+        entry['job_id'] = get_commit_last_successful_job(proj, entry['commit'], entry['job']).id
         click.echo('* %s: %s => %s => %s' % (
-            entry['project'], entry['ref'], entry['commit'], entry['build_id']), sys.stderr)
+            entry['project'], entry['ref'], entry['commit'], entry['job_id']), sys.stderr)
 
     _yaml.save(_paths.artifacts_lock_file, artifacts)
 
@@ -57,21 +78,22 @@ def update():
 def download():
     """Download artifacts to local cache."""
 
-    config = _config.load()
-    gitlab = _gitlab.Gitlab(**config)
+    gitlab = get_gitlab()
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
-        filename = '%s/%s.zip' % (entry['project'], entry['build_id'])
+        filename = zip_name(entry['project'], entry['job_id'])
         try:
             _cache.get(filename)
         except KeyError:
-            click.echo('* %s: %s => downloading...' % (entry['project'], entry['build_id']))
-            artifacts_zip = gitlab.get_artifacts_zip(entry['project'], entry['build_id'])
-            _cache.save(filename, artifacts_zip)
-            click.echo('* %s: %s => downloaded.' % (entry['project'], entry['build_id']))
+            click.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
+            proj = gitlab.projects.get(entry['project'])
+            job = proj.jobs.get(entry['job_id'], lazy=True)
+            with _cache.save_file(filename) as f:
+                job.artifacts(streamed=True, action=f.write)
+            click.echo('* %s: %s => downloaded.' % (entry['project'], entry['job_id']))
         else:
-            click.echo('* %s: %s => present' % (entry['project'], entry['build_id']))
+            click.echo('* %s: %s => present' % (entry['project'], entry['job_id']))
 
 
 @main.command()
@@ -108,7 +130,7 @@ def install():
         del source, destination # pylint: disable=undefined-loop-variable
 
         # open the artifacts.zip archive
-        filename = '%s/%s.zip' % (entry['project'], entry['build_id'])
+        filename = zip_name(entry['project'], entry['job_id'])
         archive_file = _cache.get(filename)
         archive = zipfile.ZipFile(archive_file)
 
