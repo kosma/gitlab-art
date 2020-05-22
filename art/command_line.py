@@ -148,3 +148,8 @@ def install():
                     with archive.open(member) as fmember:
                         with open(target, 'wb') as ftarget:
                             shutil.copyfileobj(fmember, ftarget)
+
+                    # if create_system is Unix (3), external_attr contains filesystem permissions
+                    if member.create_system == 3:
+                        perms = member.external_attr >> 16
+                        os.chmod(target, perms)
