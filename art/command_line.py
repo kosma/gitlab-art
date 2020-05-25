@@ -35,6 +35,27 @@ def zip_name(project, job_id):
     return os.path.join(project, '{}.zip'.format(job_id))
 
 
+def install_member(archive, member, target):
+    """Install a zip archive member
+
+    Parameters:
+    archive     Archive from which to extract the file
+    member      ZipInfo identifying the file to extract
+    target      Path to which the file is extracted
+    """
+    click.echo('* install: %s => %s' % (member.filename, target))
+    if os.sep in target:
+        _paths.mkdirs(os.path.dirname(target))
+    with archive.open(member) as fmember:
+        with open(target, 'wb') as ftarget:
+            shutil.copyfileobj(fmember, ftarget)
+
+    # if create_system is Unix (3), external_attr contains filesystem permissions
+    if member.create_system == 3:
+        filemode = member.external_attr >> 16
+        os.chmod(target, filemode)
+
+
 @click.group()
 @click.option('--cache', '-c', help='Download cache directory.')
 def main(cache):
@@ -142,14 +163,4 @@ def install():
             for match, translate in installs:
                 if match(member.filename):
                     target = translate(member.filename)
-                    click.echo('* install: %s => %s' % (member.filename, target))
-                    if os.sep in target:
-                        _paths.mkdirs(os.path.dirname(target))
-                    with archive.open(member) as fmember:
-                        with open(target, 'wb') as ftarget:
-                            shutil.copyfileobj(fmember, ftarget)
-
-                    # if create_system is Unix (3), external_attr contains filesystem permissions
-                    if member.create_system == 3:
-                        perms = member.external_attr >> 16
-                        os.chmod(target, perms)
+                    install_member(archive, member, target)
