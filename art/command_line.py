@@ -135,14 +135,14 @@ def install():
         archive = zipfile.ZipFile(archive_file)
 
         # iterate over the zip archive
-        for member in archive.namelist():
-            if member.endswith('/'):
+        for member in archive.infolist():
+            if member.is_dir():
                 # skip directories, they will be created as-is
                 continue
             for match, translate in installs:
-                if match(member):
-                    target = translate(member)
-                    click.echo('* install: %s => %s' % (member, target))
+                if match(member.filename):
+                    target = translate(member.filename)
+                    click.echo('* install: %s => %s' % (member.filename, target))
                     if os.sep in target:
                         _paths.mkdirs(os.path.dirname(target))
                     with archive.open(member) as fmember:
