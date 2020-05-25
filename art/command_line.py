@@ -4,6 +4,7 @@ from __future__ import absolute_import
 
 import os
 import shutil
+import stat
 import sys
 import zipfile
 import click
@@ -12,6 +13,8 @@ from . import _cache
 from . import _config
 from . import _paths
 from . import _yaml
+
+S_IRWXUGO = 0o0777
 
 def get_gitlab():
     config = _config.load()
@@ -43,17 +46,27 @@ def install_member(archive, member, target):
     member      ZipInfo identifying the file to extract
     target      Path to which the file is extracted
     """
-    click.echo('* install: %s => %s' % (member.filename, target))
+    access = None
+    filemode_str = ""
+
+    # if create_system is Unix (3), external_attr contains filesystem permissions
+    if member.create_system == 3:
+        filemode = member.external_attr >> 16
+
+        # Keep only the normal permissions bits;
+        # ignore special bits like setuid, setgid, sticky
+        access = filemode & S_IRWXUGO
+        filemode_str = '   ' + stat.filemode(stat.S_IFMT(filemode) | access)
+
+    click.echo('* install: %s => %s%s' % (member.filename, target, filemode_str))
     if os.sep in target:
         _paths.mkdirs(os.path.dirname(target))
     with archive.open(member) as fmember:
         with open(target, 'wb') as ftarget:
             shutil.copyfileobj(fmember, ftarget)
 
-    # if create_system is Unix (3), external_attr contains filesystem permissions
-    if member.create_system == 3:
-        filemode = member.external_attr >> 16
-        os.chmod(target, filemode)
+    if access is not None:
+        os.chmod(target, access)
 
 
 @click.group()
