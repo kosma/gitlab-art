@@ -12,6 +12,7 @@ from . import _cache
 from . import _config
 from . import _paths
 from . import _yaml
+from . import __version__ as version
 
 def get_gitlab():
     config = _config.load()
@@ -36,6 +37,7 @@ def zip_name(project, job_id):
 
 
 @click.group()
+@click.version_option(version, prog_name='art')
 @click.option('--cache', '-c', help='Download cache directory.')
 def main(cache):
     """Art, the Gitlab artifact repository client."""
