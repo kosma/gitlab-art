@@ -13,7 +13,7 @@ setup(
     description='Gitlab artifact manager',
     long_description = read_project_file('README.md'),
     long_description_content_type = 'text/markdown',
-    url='https://github.com/kosma/art',
+    url='https://github.com/kosma/gitlab-art',
     author='Kosma Moczek',
     author_email='kosma@kosma.pl',
     license='WTFPL',
