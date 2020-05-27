@@ -18,8 +18,8 @@ def get_gitlab():
     return Gitlab(config['gitlab_url'], private_token=config['private_token'])
 
 
-def get_commit_last_successful_job(project, commit, job_name):
-    pipelines = project.pipelines.list(as_list=False, sha=commit, order_by='id', sort='desc')
+def get_ref_last_successful_job(project, ref, job_name):
+    pipelines = project.pipelines.list(as_list=False, ref=ref, order_by='id', sort='desc')
     for pipeline in pipelines:
         jobs = pipeline.jobs.list(as_list=False, scope='success')
         for job in jobs:
@@ -66,10 +66,9 @@ def update():
 
     for entry in artifacts:
         proj = gitlab.projects.get(entry['project'])
-        entry['commit'] = proj.commits.get(entry['ref']).id
-        entry['job_id'] = get_commit_last_successful_job(proj, entry['commit'], entry['job']).id
-        click.echo('* %s: %s => %s => %s' % (
-            entry['project'], entry['ref'], entry['commit'], entry['job_id']), sys.stderr)
+        entry['job_id'] = get_ref_last_successful_job(proj, entry['ref'], entry['job']).id
+        click.echo('* %s: %s => %s' % (
+            entry['project'], entry['ref'], entry['job_id']), sys.stderr)
 
     _yaml.save(_paths.artifacts_lock_file, artifacts)
 
