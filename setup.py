@@ -1,8 +1,9 @@
 from setuptools import setup, find_packages
+from art import __version__ as version
 
 setup(
     name='gitlab-art',
-    version='0.2.0',
+    version=version,
     description='Gitlab artifact manager',
     url='https://github.com/kosma/art',
     author='Kosma Moczek',
