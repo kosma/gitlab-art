@@ -20,7 +20,7 @@
         build/apidoc/html/: docs/api/
         VERSION: docs/VERSION
     - project: kosma/foobar-firmware
-      ref: tags/1.4.0
+      ref: 1.4.0
       job: firmware-8051
       install:
         build/8051/release/firmware.bin: blobs/firmware-8051.blob
