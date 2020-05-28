@@ -31,8 +31,8 @@ def get_ref_last_successful_job(project, ref, job_name):
                 # Turn ProjectPipelineJob into ProjectJob
                 return project.jobs.get(job.id, lazy=True)
 
-    raise Exception("Could not find latest successful '{}' job for commit {}".format(
-        job_name, commit))
+    raise Exception("Could not find latest successful '{}' job for {} ref {}".format(
+        job_name, project.path_with_namespace, ref))
 
 
 def zip_name(project, job_id):
@@ -95,7 +95,7 @@ def configure(**kwargs):
 
 @main.command()
 def update():
-    """Update latest tag/branch commits."""
+    """Update latest tag/branch job IDs."""
 
     gitlab = get_gitlab()
     artifacts = _yaml.load(_paths.artifacts_file)
