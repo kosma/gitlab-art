@@ -84,11 +84,15 @@ class InstallAction():
             filemode_str = '   ' + stat.filemode(stat.S_IFMT(filemode) | access)
 
         click.echo('* install: %s => %s%s' % (member.filename, target, filemode_str))
-        if os.sep in target:
-            _paths.mkdirs(os.path.dirname(target))
-        with archive.open(member) as fmember:
-            with open(target, 'wb') as ftarget:
-                shutil.copyfileobj(fmember, ftarget)
+
+        if member.filename.endswith('/'):
+            _paths.mkdirs(target)
+        else:
+            if os.sep in target:
+                _paths.mkdirs(os.path.dirname(target))
+            with archive.open(member) as fmember:
+                with open(target, 'wb') as ftarget:
+                    shutil.copyfileobj(fmember, ftarget)
 
         if access is not None:
             os.chmod(target, access)

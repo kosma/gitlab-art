@@ -124,7 +124,8 @@ def download():
 
 
 @main.command()
-def install():
+@click.option('--keep-empty-dirs', '-k', default=False, is_flag=True, help='Do not prune empty directories.')
+def install(keep_empty_dirs):
     """Install artifacts to current directory."""
 
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
@@ -143,9 +144,12 @@ def install():
 
         # iterate over the zip archive
         for member in archive.infolist():
-            if member.filename.endswith('/'):
-                # skip directories, they will be created as-is
+            # Skip directory members
+            # - Parent directories are created when installing files
+            # - The keep_empty_dirs option preserves the original archive tree
+            if not keep_empty_dirs and member.filename.endswith('/'):
                 continue
+
             # perform installs that match this member
             for action in actions:
                 if not action.match(member.filename):
