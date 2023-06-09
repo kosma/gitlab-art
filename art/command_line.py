@@ -19,7 +19,12 @@ S_IRWXUGO = 0o0777
 
 def get_gitlab():
     config = _config.load()
-    return Gitlab(config['gitlab_url'], private_token=config['private_token'], job_token=config['job_token'])
+    if config['token_type'] == 'private':
+        return Gitlab(config['gitlab_url'], private_token=config['token'])
+    if config['token_type'] == 'job':
+        return Gitlab(config['gitlab_url'], job_token=config['token'])
+
+    raise Exception("Unknown token type: {}".format(config['token_type']))
 
 
 def get_ref_last_successful_job(project, ref, job_name):

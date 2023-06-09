@@ -10,16 +10,20 @@ from . import _yaml
 def save(gitlab_url, token_type, token):
     config = {
         'gitlab_url': gitlab_url,
+        'token_type': token_type,
+        'token': token,
     }
-    if token_type == 'private':
-        config['private_token'] = token
-        config['job_token'] = None
-    elif token_type == 'job':
-        config['job_token'] = token
-        config['private_token'] = None
     _paths.mkdirs(os.path.dirname(_paths.config_file))
     _yaml.save(_paths.config_file, config)
 
 
 def load():
-    return _yaml.load(_paths.config_file)
+    config = _yaml.load(_paths.config_file)
+   
+    # migrate legacy private_token to token/token_type
+    if 'private_token' in config:
+        config['token'] = config['private_token']
+        config['token_type'] = 'private'
+        del config['private_token']
+        
+    return config
