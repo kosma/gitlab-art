@@ -19,7 +19,7 @@ S_IRWXUGO = 0o0777
 
 def get_gitlab():
     config = _config.load()
-    return Gitlab(config['gitlab_url'], private_token=config['private_token'])
+    return Gitlab(config['gitlab_url'], private_token=config['private_token'], job_token=config['job_token'])
 
 
 def get_ref_last_successful_job(project, ref, job_name):
@@ -86,7 +86,8 @@ def main(cache):
 
 @main.command()
 @click.argument('gitlab_url')
-@click.argument('private_token')
+@click.option('--token-type', type=click.Choice(['private', 'job']), default='private')
+@click.argument('token')
 def configure(**kwargs):
     """Configure Gitlab URL and access token."""
 

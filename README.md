@@ -7,7 +7,7 @@
 1. Create a Gitlab private token and save it in `art` configuration:
 
     ```shell
-    art configure https://gitlab.example.com/ 'as1!df2@gh3#jk4$'
+    art configure https://gitlab.example.com/ --token-type private 'as1!df2@gh3#jk4$'
     ```
 
 2. Create `artifacts.yml` with definitions of needed artifacts:
@@ -56,7 +56,7 @@ Add the following commands to your `.gitlab-ci.yml`:
 ```yaml
 before_script:
   - sudo pip install https://github.com/kosma/art
-  - art configure <url> <token>
+  - art configure <url> --token-type <private|job> <token>
   - art download
   - art install
 cache:
@@ -72,9 +72,6 @@ automatically set to `.art-cache` so it can be preserved across jobs.
 
 ## Bugs and limitations
 
-* Gitlab's `$CI_BUILD_TOKEN` infrastructure doesn't support accessing artifacts,
-  so a private token must be used. This is very unfortunate and kludgey.
-  This might be fixed in future Gitlab releases (if I bug them hard enough).
 * Multiple Gitlab instances are not supported (and would be non-trivial to support).
 * Error handling is very rudimentary: any non-trivial exceptions simply propagate
   until Python dumps a stack trace.
