@@ -23,7 +23,7 @@ setup(
         'PyYAML',
         'appdirs',
         'click',
-        'python-gitlab',
+        'python-gitlab>=1.12.0',
     ],
     entry_points={
         'console_scripts': [
