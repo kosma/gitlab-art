@@ -128,7 +128,7 @@ def download():
             _cache.get(filename)
         except KeyError:
             click.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
-            proj = gitlab.projects.get(entry['project'])
+            proj = gitlab.projects.get(entry['project'], lazy=True)
             job = proj.jobs.get(entry['job_id'], lazy=True)
             with _cache.save_file(filename) as f:
                 job.artifacts(streamed=True, action=f.write)
