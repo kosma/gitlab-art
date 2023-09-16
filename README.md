@@ -56,7 +56,7 @@ Add the following commands to your `.gitlab-ci.yml`:
 ```yaml
 before_script:
   - sudo pip install https://github.com/kosma/art
-  - art configure <url> --token-type <private|job> <token>
+  - art configure <url> --token-type {private,job} <token>
   - art download
   - art install
 cache:
