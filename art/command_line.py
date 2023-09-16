@@ -30,7 +30,7 @@ def is_using_job_token(gitlab):
     """Determine if the GitLab client will use a job token to authenticate.
 
     Job tokens cannot access the full GitLab API. The GitLab client uses a job
-    token as a last resort when other tokens are available.
+    token as a last resort when other tokens are unavailable.
     """
     # private and oauth tokens will be used, if available
     if gitlab.private_token is not None or gitlab.oauth_token is not None:
