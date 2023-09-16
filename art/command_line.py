@@ -26,6 +26,17 @@ def get_gitlab():
 
     raise Exception("Unknown token type: {}".format(config['token_type']))
 
+def is_using_job_token(gitlab):
+    """Determine if the GitLab client will use a job token to authenticate.
+
+    Job tokens cannot access the full GitLab API. The GitLab client uses a job
+    token as a last resort when other tokens are available.
+    """
+    # private and oauth tokens will be used, if available
+    if gitlab.private_token is not None or gitlab.oauth_token is not None:
+        return False
+
+    return gitlab.job_token is not None
 
 def get_ref_last_successful_job(project, ref, job_name):
     pipelines = project.pipelines.list(as_list=False, ref=ref, order_by='id', sort='desc')
@@ -104,8 +115,12 @@ def update():
     """Update latest tag/branch job IDs."""
 
     gitlab = get_gitlab()
-    artifacts = _yaml.load(_paths.artifacts_file)
 
+    # As of GitLab 16.4, you cannot access the projects and jobs APIs with a job token
+    if is_using_job_token(gitlab):
+        raise Exception('A job token cannot be used to update artifacts')
+
+    artifacts = _yaml.load(_paths.artifacts_file)
     for entry in artifacts:
         proj = gitlab.projects.get(entry['project'])
         entry['job_id'] = get_ref_last_successful_job(proj, entry['ref'], entry['job']).id
