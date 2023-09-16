@@ -3,9 +3,18 @@
 from __future__ import absolute_import
 
 import os
+
+import click
+
 from . import _paths
 from . import _yaml
 
+
+class ConfigException(click.ClickException):
+    """An exception caused by invalid configuration settings."""
+    def __init__(self, config_key, message):
+        msg = 'config.{}: {}'.format(config_key, message)
+        super().__init__(msg)
 
 def save(gitlab_url, token_type, token):
     config = {

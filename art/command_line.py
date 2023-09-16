@@ -24,7 +24,7 @@ def get_gitlab():
     if config['token_type'] == 'job':
         return Gitlab(config['gitlab_url'], job_token=config['token'])
 
-    raise Exception("Unknown token type: {}".format(config['token_type']))
+    raise _config.ConfigException('token_type', 'Unknown token type: {}'.format(config['token_type']))
 
 def is_using_job_token(gitlab):
     """Determine if the GitLab client will use a job token to authenticate.
@@ -47,7 +47,7 @@ def get_ref_last_successful_job(project, ref, job_name):
                 # Turn ProjectPipelineJob into ProjectJob
                 return project.jobs.get(job.id, lazy=True)
 
-    raise Exception("Could not find latest successful '{}' job for {} ref {}".format(
+    raise click.ClickException("Could not find latest successful '{}' job for {} ref {}".format(
         job_name, project.path_with_namespace, ref))
 
 
@@ -118,7 +118,7 @@ def update():
 
     # As of GitLab 16.4, you cannot access the projects and jobs APIs with a job token
     if is_using_job_token(gitlab):
-        raise Exception('A job token cannot be used to update artifacts')
+        raise _config.ConfigException('token_type', 'A job token cannot be used to update artifacts')
 
     artifacts = _yaml.load(_paths.artifacts_file)
     for entry in artifacts:
