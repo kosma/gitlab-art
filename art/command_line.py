@@ -29,8 +29,10 @@ def get_gitlab():
 def is_using_job_token(gitlab):
     """Determine if the GitLab client will use a job token to authenticate.
 
-    Job tokens cannot access the full GitLab API. The GitLab client uses a job
-    token as a last resort when other tokens are unavailable.
+    Job tokens cannot access the full GitLab API. See the documentation here:
+    https://docs.gitlab.com/ee/ci/jobs/ci_job_token.html
+
+    The client only uses a job token when other tokens are unavailable.
     """
     # private and oauth tokens will be used, if available
     if gitlab.private_token is not None or gitlab.oauth_token is not None:
@@ -116,7 +118,8 @@ def update():
 
     gitlab = get_gitlab()
 
-    # As of GitLab 16.4, you cannot access the projects and jobs APIs with a job token
+    # With current GitLab (16.3, as of this writing)
+    # You cannot access the projects and jobs API endpoints using a job token
     if is_using_job_token(gitlab):
         raise _config.ConfigException('token_type', 'A job token cannot be used to update artifacts')
 
@@ -143,6 +146,8 @@ def download():
             _cache.get(filename)
         except KeyError:
             click.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
+            # Use shallow objects for proj and job to allow compatibility with
+            # job tokens where only the artifacts endpoint is accessible.
             proj = gitlab.projects.get(entry['project'], lazy=True)
             job = proj.jobs.get(entry['job_id'], lazy=True)
             with _cache.save_file(filename) as f:
