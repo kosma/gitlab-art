@@ -19,8 +19,26 @@ S_IRWXUGO = 0o0777
 
 def get_gitlab():
     config = _config.load()
-    return Gitlab(config['gitlab_url'], private_token=config['private_token'])
+    if config['token_type'] == 'private':
+        return Gitlab(config['gitlab_url'], private_token=config['token'])
+    if config['token_type'] == 'job':
+        return Gitlab(config['gitlab_url'], job_token=config['token'])
 
+    raise _config.ConfigException('token_type', 'Unknown token type: {}'.format(config['token_type']))
+
+def is_using_job_token(gitlab):
+    """Determine if the GitLab client will use a job token to authenticate.
+
+    Job tokens cannot access the full GitLab API. See the documentation here:
+    https://docs.gitlab.com/ee/ci/jobs/ci_job_token.html
+
+    The client only uses a job token when other tokens are unavailable.
+    """
+    # private and oauth tokens will be used, if available
+    if gitlab.private_token is not None or gitlab.oauth_token is not None:
+        return False
+
+    return gitlab.job_token is not None
 
 def get_ref_last_successful_job(project, ref, job_name):
     pipelines = project.pipelines.list(as_list=False, ref=ref, order_by='id', sort='desc')
@@ -31,7 +49,7 @@ def get_ref_last_successful_job(project, ref, job_name):
                 # Turn ProjectPipelineJob into ProjectJob
                 return project.jobs.get(job.id, lazy=True)
 
-    raise Exception("Could not find latest successful '{}' job for {} ref {}".format(
+    raise click.ClickException("Could not find latest successful '{}' job for {} ref {}".format(
         job_name, project.path_with_namespace, ref))
 
 
@@ -86,7 +104,8 @@ def main(cache):
 
 @main.command()
 @click.argument('gitlab_url')
-@click.argument('private_token')
+@click.option('--token-type', type=click.Choice(['private', 'job']), default='private')
+@click.argument('token')
 def configure(**kwargs):
     """Configure Gitlab URL and access token."""
 
@@ -98,8 +117,13 @@ def update():
     """Update latest tag/branch job IDs."""
 
     gitlab = get_gitlab()
-    artifacts = _yaml.load(_paths.artifacts_file)
 
+    # With current GitLab (16.3, as of this writing)
+    # You cannot access the projects and jobs API endpoints using a job token
+    if is_using_job_token(gitlab):
+        raise _config.ConfigException('token_type', 'A job token cannot be used to update artifacts')
+
+    artifacts = _yaml.load(_paths.artifacts_file)
     for entry in artifacts:
         proj = gitlab.projects.get(entry['project'])
         entry['job_id'] = get_ref_last_successful_job(proj, entry['ref'], entry['job']).id
@@ -122,7 +146,9 @@ def download():
             _cache.get(filename)
         except KeyError:
             click.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
-            proj = gitlab.projects.get(entry['project'])
+            # Use shallow objects for proj and job to allow compatibility with
+            # job tokens where only the artifacts endpoint is accessible.
+            proj = gitlab.projects.get(entry['project'], lazy=True)
             job = proj.jobs.get(entry['job_id'], lazy=True)
             with _cache.save_file(filename) as f:
                 job.artifacts(streamed=True, action=f.write)
