@@ -3,19 +3,16 @@
 from __future__ import absolute_import
 
 import os
-import shutil
-import stat
 import sys
 import zipfile
 import click
 from gitlab import Gitlab
 from . import _cache
 from . import _config
+from . import _install
 from . import _paths
 from . import _yaml
 from . import __version__ as version
-
-S_IRWXUGO = 0o0777
 
 def get_gitlab():
     config = _config.load()
@@ -55,37 +52,6 @@ def get_ref_last_successful_job(project, ref, job_name):
 
 def zip_name(project, job_id):
     return os.path.join(project, '{}.zip'.format(job_id))
-
-
-def install_member(archive, member, target):
-    """Install a zip archive member
-
-    Parameters:
-    archive     Archive from which to extract the file
-    member      ZipInfo identifying the file to extract
-    target      Path to which the file is extracted
-    """
-    access = None
-    filemode_str = ""
-
-    # if create_system is Unix (3), external_attr contains filesystem permissions
-    if member.create_system == 3:
-        filemode = member.external_attr >> 16
-
-        # Keep only the normal permissions bits;
-        # ignore special bits like setuid, setgid, sticky
-        access = filemode & S_IRWXUGO
-        filemode_str = '   ' + stat.filemode(stat.S_IFMT(filemode) | access)
-
-    click.echo('* install: %s => %s%s' % (member.filename, target, filemode_str))
-    if os.sep in target:
-        _paths.mkdirs(os.path.dirname(target))
-    with archive.open(member) as fmember:
-        with open(target, 'wb') as ftarget:
-            shutil.copyfileobj(fmember, ftarget)
-
-    if access is not None:
-        os.chmod(target, access)
 
 
 @click.group()
@@ -158,37 +124,18 @@ def download():
 
 
 @main.command()
-def install():
+@click.option('--keep-empty-dirs', '-k', default=False, is_flag=True, help='Do not prune empty directories.')
+def install(keep_empty_dirs):
     """Install artifacts to current directory."""
 
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
-        # convert the "install" dictionary to list of (match, translate)
-        installs = []
-        for source, destination in entry['install'].items():
-            # Nb. Defaults parameters on lambda are required due to derpy
-            #     Python closure semantics (scope capture).
-            if source == '.':
-                # "copy all" filter
-                installs.append((
-                    lambda f, s=source, d=destination: True,
-                    lambda f, s=source, d=destination: os.path.join(d, f)
-                ))
-            elif source.endswith('/'):
-                # 1:1 directory filter
-                installs.append((
-                    lambda f, s=source, d=destination: f.startswith(s),
-                    lambda f, s=source, d=destination: os.path.join(d, f[len(s):])
-                ))
-            else:
-                # 1:1 file filter
-                installs.append((
-                    lambda f, s=source, d=destination: f == s,
-                    lambda f, s=source, d=destination: d
-                ))
-        # make sure there are no bugs in the lambdas above
-        del source, destination # pylint: disable=undefined-loop-variable
+        # dictionary of src:dest pairs representing artifacts to install
+        install_requests = entry['install']
+
+        # create an InstallAction (file match and translate) for each request
+        actions = [_install.InstallAction(src, dest) for src, dest in install_requests.items()]
 
         # open the artifacts.zip archive
         filename = zip_name(entry['project'], entry['job_id'])
@@ -197,10 +144,22 @@ def install():
 
         # iterate over the zip archive
         for member in archive.infolist():
-            if member.filename.endswith('/'):
-                # skip directories, they will be created as-is
+            # Skip directory members
+            # - Parent directories are created when installing files
+            # - The keep_empty_dirs option preserves the original archive tree
+            if not keep_empty_dirs and member.filename.endswith('/'):
                 continue
-            for match, translate in installs:
-                if match(member.filename):
-                    target = translate(member.filename)
-                    install_member(archive, member, target)
+
+            # perform installs that match this member
+            for action in actions:
+                if not action.match(member.filename):
+                    continue
+
+                action.install(archive, member)
+
+                # remove requests that are successfully installed
+                install_requests.pop(action.src, None)
+
+        # Report an error if any requested artifacts were not installed
+        if install_requests:
+            raise _install.InstallUnmatchedError(filename, entry, install_requests)
