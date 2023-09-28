@@ -2,10 +2,14 @@
 
 from __future__ import absolute_import
 
+import contextlib
 import os
 import sys
 import zipfile
+
 import click
+import requests
+from gitlab import exceptions as GitlabExceptions
 from gitlab import Gitlab
 from . import _cache
 from . import _config
@@ -23,6 +27,26 @@ def get_gitlab():
 
     raise _config.ConfigException('token_type', 'Unknown token type: {}'.format(config['token_type']))
 
+
+@contextlib.contextmanager
+def try_gitlab(gitlab, fail_msg=None):
+    """Centralize common GitLab exception handling"""
+
+    try:
+        yield
+    except requests.exceptions.SSLError as exc:
+        raise click.ClickException('TLS connection to %s failed: %s' % (gitlab.url, exc))
+    except requests.exceptions.ConnectionError as exc:
+        raise click.ClickException('Connection to %s failed: %s' % (gitlab.url, exc))
+    except GitlabExceptions.GitlabAuthenticationError as exc:
+        raise click.ClickException('GitLab authentication failed: %s' % exc)
+    except GitlabExceptions.GitlabOperationError as exc:
+        msg = str(exc)
+        if fail_msg:
+            msg = '%s: %s' % (fail_msg, exc)
+
+        raise click.ClickException(msg)
+
 def is_using_job_token(gitlab):
     """Determine if the GitLab client will use a job token to authenticate.
 
@@ -36,6 +60,7 @@ def is_using_job_token(gitlab):
         return False
 
     return gitlab.job_token is not None
+
 
 def get_ref_last_successful_job(project, ref, job_name):
     pipelines = project.pipelines.list(as_list=False, ref=ref, order_by='id', sort='desc')
@@ -61,13 +86,20 @@ def download_archive(gitlab, entry, filename):
 
     click.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
 
-    # Use shallow objects for proj and job to allow compatibility with
-    # job tokens where only the artifacts endpoint is accessible.
-    proj = gitlab.projects.get(entry['project'], lazy=True)
-    job = proj.jobs.get(entry['job_id'], lazy=True)
+    fail_msg = 'Failed to download job "%s" (id=%s) from "%s"' % (
+        entry['job'],
+        entry['job_id'],
+        entry['project'])
 
-    with _cache.save_file(filename) as f:
-        job.artifacts(streamed=True, action=f.write)
+    with try_gitlab(gitlab, fail_msg):
+        # Use shallow objects for proj and job to allow compatibility with
+        # job tokens where only the artifacts endpoint is accessible.
+        proj = gitlab.projects.get(entry['project'], lazy=True)
+        job = proj.jobs.get(entry['job_id'], lazy=True)
+
+        with _cache.save_file(filename) as fileobj:
+            job.artifacts(streamed=True, action=fileobj.write)
+
     click.echo('* %s: %s => downloaded.' % (entry['project'], entry['job_id']))
 
 
@@ -124,8 +156,14 @@ def update():
 
     artifacts = _yaml.load(_paths.artifacts_file)
     for entry in artifacts:
-        proj = gitlab.projects.get(entry['project'])
-        entry['job_id'] = get_ref_last_successful_job(proj, entry['ref'], entry['job']).id
+        fail_msg = 'Failed to get last successful "%s" job for "%s" ref "%s"' % (
+            entry['job'],
+            entry['project'],
+            entry['ref'])
+        with try_gitlab(gitlab, fail_msg):
+            proj = gitlab.projects.get(entry['project'])
+            entry['job_id'] = get_ref_last_successful_job(proj, entry['ref'], entry['job']).id
+
         click.echo('* %s: %s => %s' % (
             entry['project'], entry['ref'], entry['job_id']), sys.stderr)
 
