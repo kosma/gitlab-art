@@ -50,9 +50,42 @@ def get_ref_last_successful_job(project, ref, job_name):
         job_name, project.path_with_namespace, ref))
 
 
-def zip_name(project, job_id):
-    return os.path.join(project, '{}.zip'.format(job_id))
+def zip_name(entry):
+    """Get the cache-relative path to the archive file for an artifacts.yml entry"""
 
+    return os.path.join(entry['project'], '{}.zip'.format(entry['job_id']))
+
+
+def download_archive(gitlab, entry, filename):
+    """Download the archive file for an artifacts.yml entry"""
+
+    click.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
+
+    # Use shallow objects for proj and job to allow compatibility with
+    # job tokens where only the artifacts endpoint is accessible.
+    proj = gitlab.projects.get(entry['project'], lazy=True)
+    job = proj.jobs.get(entry['job_id'], lazy=True)
+
+    with _cache.save_file(filename) as f:
+        job.artifacts(streamed=True, action=f.write)
+    click.echo('* %s: %s => downloaded.' % (entry['project'], entry['job_id']))
+
+
+def get_cached_archive(gitlab, entry):
+    """Open the archive file for an entry. Download if necessary"""
+
+    filename = zip_name(entry)
+    try:
+        return _cache.get(filename)
+    except KeyError:
+        pass
+
+    download_archive(gitlab, entry, filename)
+    try:
+        return _cache.get(filename)
+    except KeyError as exc:
+        msg = 'File "%s" was not found after download' % _cache.cache_path(filename)
+        raise click.ClickException(msg) from exc
 
 @click.group()
 @click.version_option(version, prog_name='art')
@@ -107,27 +140,19 @@ def download():
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
-        filename = zip_name(entry['project'], entry['job_id'])
-        try:
-            _cache.get(filename)
-        except KeyError:
-            click.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
-            # Use shallow objects for proj and job to allow compatibility with
-            # job tokens where only the artifacts endpoint is accessible.
-            proj = gitlab.projects.get(entry['project'], lazy=True)
-            job = proj.jobs.get(entry['job_id'], lazy=True)
-            with _cache.save_file(filename) as f:
-                job.artifacts(streamed=True, action=f.write)
-            click.echo('* %s: %s => downloaded.' % (entry['project'], entry['job_id']))
-        else:
+        filename = zip_name(entry)
+        if _cache.contains(filename):
             click.echo('* %s: %s => present' % (entry['project'], entry['job_id']))
+            continue
 
+        download_archive(gitlab, entry, filename)
 
 @main.command()
 @click.option('--keep-empty-dirs', '-k', default=False, is_flag=True, help='Do not prune empty directories.')
 def install(keep_empty_dirs):
     """Install artifacts to current directory."""
 
+    gitlab = get_gitlab()
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
@@ -138,8 +163,7 @@ def install(keep_empty_dirs):
         actions = [_install.InstallAction(src, dest) for src, dest in install_requests.items()]
 
         # open the artifacts.zip archive
-        filename = zip_name(entry['project'], entry['job_id'])
-        archive_file = _cache.get(filename)
+        archive_file = get_cached_archive(gitlab, entry)
         archive = zipfile.ZipFile(archive_file)
 
         # iterate over the zip archive
@@ -160,6 +184,11 @@ def install(keep_empty_dirs):
                 # remove requests that are successfully installed
                 install_requests.pop(action.src, None)
 
+        # Close zip and archive file
+        # No try/finally/with here to reduce nesting, we'd exit anyway
+        archive.close()
+        archive_file.close()
+
         # Report an error if any requested artifacts were not installed
         if install_requests:
-            raise _install.InstallUnmatchedError(filename, entry, install_requests)
+            raise _install.InstallUnmatchedError(zip_name(entry), entry, install_requests)

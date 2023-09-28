@@ -26,12 +26,16 @@ def save(filename, content):
         f.write(content)
 
 
+def contains(filename):
+    return os.path.isfile(cache_path(filename))
+
+
 def get(filename):
     try:
         return open(cache_path(filename), 'rb')
     except IOError as exc:
         # translate "No such file or directory" into KeyError
         if exc.errno == errno.ENOENT:
-            raise KeyError(filename)
+            raise KeyError(filename) from exc
         else:
             raise
