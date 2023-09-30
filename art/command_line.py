@@ -155,6 +155,9 @@ def update():
         raise _config.ConfigException('token_type', 'A job token cannot be used to update artifacts')
 
     artifacts = _yaml.load(_paths.artifacts_file)
+    if not artifacts:
+        raise click.ClickException('The %s file was not found or did not contain any entries' % _paths.artifacts_file)
+
     for entry in artifacts:
         fail_msg = 'Failed to get last successful "%s" job for "%s" ref "%s"' % (
             entry['job'],
@@ -176,6 +179,8 @@ def download():
 
     gitlab = get_gitlab()
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
+    if not artifacts_lock:
+        raise click.ClickException('No entries in %s file. Run "art update" first.' % _paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
         filename = zip_name(entry)
@@ -192,6 +197,8 @@ def install(keep_empty_dirs):
 
     gitlab = get_gitlab()
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
+    if not artifacts_lock:
+        raise click.ClickException('No entries in %s file. Run "art update" first.' % _paths.artifacts_lock_file)
 
     for entry in artifacts_lock:
         # dictionary of src:dest pairs representing artifacts to install
