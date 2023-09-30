@@ -135,7 +135,7 @@ def main(cache):
 
 @main.command()
 @click.argument('gitlab_url')
-@click.option('--token-type', type=click.Choice(['private', 'job']), default='private')
+@click.option('--token-type', '-t', type=click.Choice(['private', 'job']), default='private')
 @click.argument('token')
 def configure(**kwargs):
     """Configure Gitlab URL and access token."""
