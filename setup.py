@@ -11,6 +11,7 @@ def read_project_file(path):
 setup(
     name='gitlab-art',
     version=version,
+    python_requires='>=3.5',
     description='Gitlab artifact manager',
     long_description = read_project_file('README.md'),
     long_description_content_type = 'text/markdown',
