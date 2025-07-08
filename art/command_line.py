@@ -6,6 +6,7 @@ import contextlib
 import os
 import sys
 import zipfile
+import json
 
 import click
 import requests
@@ -192,17 +193,27 @@ def download():
 
 @main.command()
 @click.option('--keep-empty-dirs', '-k', default=False, is_flag=True, help='Do not prune empty directories.')
-def install(keep_empty_dirs):
+@click.option('--json', '-j', 'output_json', default=False, is_flag=True, help='Output artifact information to JSON')
+def install(keep_empty_dirs, output_json):
     """Install artifacts to current directory."""
 
     gitlab = get_gitlab()
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
     if not artifacts_lock:
         raise click.ClickException('No entries in %s file. Run "art update" first.' % _paths.artifacts_lock_file)
-
+    
+    # Explanation of relevant keys for each entry:
+    #
+    # entry["install"]: Requests to install files that match the indicated
+    #                   source pattern, from the artifact to the target location.
+    # entry["files"]: Files within the artifact that match the install requests
+    #                 and will be installed by "art install".
     for entry in artifacts_lock:
+        # files installed for this entry
+        entry['files'] = []
         # dictionary of src:dest pairs representing artifacts to install
-        install_requests = entry['install']
+        # make a copy as to not modify the original `artifact_lock` object
+        install_requests = entry['install'].copy()
 
         # create an InstallAction (file match and translate) for each request
         actions = [_install.InstallAction(src, dest) for src, dest in install_requests.items()]
@@ -224,10 +235,13 @@ def install(keep_empty_dirs):
                 if not action.match(member.filename):
                     continue
 
-                action.install(archive, member)
+                installed_target, filemode_str = action.install(archive, member)
 
                 # remove requests that are successfully installed
                 install_requests.pop(action.src, None)
+                
+                # add entry for this file/directory to the entry (to be used in the JSON output)
+                entry['files'].append(installed_target)
 
         # Close zip and archive file
         # No try/finally/with here to reduce nesting, we'd exit anyway
@@ -237,3 +251,7 @@ def install(keep_empty_dirs):
         # Report an error if any requested artifacts were not installed
         if install_requests:
             raise _install.InstallUnmatchedError(zip_name(entry), entry, install_requests)
+
+    if output_json:
+        json.dump(artifacts_lock, sys.stdout, indent=2)
+        sys.stdout.write(os.linesep)

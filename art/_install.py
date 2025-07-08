@@ -96,6 +96,8 @@ class InstallAction():
 
         if access is not None:
             os.chmod(target, access)
+            
+        return target, filemode_str
 
     def __str__(self):
         return '{} => {}'.format(self.src, self.dest)

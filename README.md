@@ -64,6 +64,47 @@ cache:
     - .art-cache/
 ```
 
+## Installed files
+
+The locations of the installed files along with their originating project, version
+(ref) and job_id can be outputted to stdout as JSON with the install option
+`--json`.
+
+The output is a **JSON array**, where each element is an object with the following
+fields:
+
+| Field     | Type     | Required | Default     | Description                                                                      |
+|-----------|----------|----------|-------------|----------------------------------------------------------------------------------|
+| `install` | object   | yes      | []          | A dictionary of the artifact's files/directories and destination path to install |
+| `job`     | string   | yes      | -           | Artifact's job name                                                              |
+| `job_id`  | integer  | yes      | -           | Artifact's job id                                                                |
+| `project` | string   | yes      | -           | Artifact's project name                                                          |
+| `ref`     | integer  | yes      | -           | Artifact's ref                                                                   |
+| `files`   | object   | yes      | []          | Full paths of all files installed from the Artifact                              |
+
+A simple example output is below
+
+```bash
+art install --json
+[
+  {
+    "install": {
+      "artifact_dir/": "local_dir/",
+      "foobar.txt": "foobar.txt"
+    },
+    "job": "art",
+    "job_id": 12345,
+    "project": "ART",
+    "ref": 1.0,
+    "files": [
+      "local_dir/foo.txt",
+      "local_dir/bar.txt",
+      "foobar.txt"
+    ]
+  },
+]
+```
+
 ## File locations
 
 `art` uses [appdirs](https://github.com/ActiveState/appdirs) to store configuration
