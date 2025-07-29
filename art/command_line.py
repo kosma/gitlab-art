@@ -2,52 +2,20 @@
 
 from __future__ import absolute_import
 
-import contextlib
 import os
 import sys
 import zipfile
 import json
 
 import click
-import requests
-from gitlab import exceptions as GitlabExceptions
-from gitlab import Gitlab
 from . import _cache
 from . import _config
+from . import _gitlab
 from . import _install
 from . import _paths
 from . import _termui
 from . import _yaml
 from . import __version__ as version
-
-def get_gitlab():
-    config = _config.load()
-    if config['token_type'] == 'private':
-        return Gitlab(config['gitlab_url'], private_token=config['token'])
-    if config['token_type'] == 'job':
-        return Gitlab(config['gitlab_url'], job_token=config['token'])
-
-    raise _config.ConfigException('token_type', 'Unknown token type: {}'.format(config['token_type']))
-
-
-@contextlib.contextmanager
-def try_gitlab(gitlab, fail_msg=None):
-    """Centralize common GitLab exception handling"""
-
-    try:
-        yield
-    except requests.exceptions.SSLError as exc:
-        raise click.ClickException('TLS connection to %s failed: %s' % (gitlab.url, exc))
-    except requests.exceptions.ConnectionError as exc:
-        raise click.ClickException('Connection to %s failed: %s' % (gitlab.url, exc))
-    except GitlabExceptions.GitlabAuthenticationError as exc:
-        raise click.ClickException('GitLab authentication failed: %s' % exc)
-    except GitlabExceptions.GitlabOperationError as exc:
-        msg = str(exc)
-        if fail_msg:
-            msg = '%s: %s' % (fail_msg, exc)
-
-        raise click.ClickException(msg)
 
 def is_using_job_token(gitlab):
     """Determine if the GitLab client will use a job token to authenticate.
@@ -93,7 +61,7 @@ def download_archive(gitlab, entry, filename):
         entry['job_id'],
         entry['project'])
 
-    with try_gitlab(gitlab, fail_msg):
+    with _gitlab.wrap_errors(gitlab, fail_msg):
         # Use shallow objects for proj and job to allow compatibility with
         # job tokens where only the artifacts endpoint is accessible.
         proj = gitlab.projects.get(entry['project'], lazy=True)
@@ -137,8 +105,8 @@ def main(cache):
 
 @main.command()
 @click.argument('gitlab_url')
-@click.option('--token-type', '-t', type=click.Choice(['private', 'job']), default='private')
-@click.argument('token')
+@click.option('--token-type', '-t', type=click.Choice(['private', 'job', 'oauth']), default='private')
+@click.argument('token_or_client_id')
 def configure(**kwargs):
     """Configure Gitlab URL and access token."""
 
@@ -149,7 +117,7 @@ def configure(**kwargs):
 def update():
     """Update latest tag/branch job IDs."""
 
-    gitlab = get_gitlab()
+    gitlab = _gitlab.get()
 
     # With current GitLab (16.3, as of this writing)
     # You cannot access the projects and jobs API endpoints using a job token
@@ -165,7 +133,7 @@ def update():
             entry['job'],
             entry['project'],
             entry['ref'])
-        with try_gitlab(gitlab, fail_msg):
+        with _gitlab.wrap_errors(gitlab, fail_msg):
             proj = gitlab.projects.get(entry['project'])
             entry['job_id'] = get_ref_last_successful_job(proj, entry['ref'], entry['job']).id
 
@@ -179,7 +147,7 @@ def update():
 def download():
     """Download artifacts to local cache."""
 
-    gitlab = get_gitlab()
+    gitlab = _gitlab.get()
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
     if not artifacts_lock:
         raise click.ClickException('No entries in %s file. Run "art update" first.' % _paths.artifacts_lock_file)
@@ -198,7 +166,7 @@ def download():
 def install(keep_empty_dirs, output_json):
     """Install artifacts to current directory."""
 
-    gitlab = get_gitlab()
+    gitlab = _gitlab.get()
     if output_json:
         _termui.silent = True
 
