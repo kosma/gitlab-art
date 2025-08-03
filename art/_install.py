@@ -11,23 +11,38 @@ from . import _cache
 from . import _paths
 from . import _termui
 
+UMASK_VALUE = -1
+def _get_umask():
+    global UMASK_VALUE
+    if UMASK_VALUE != -1:
+        return UMASK_VALUE
+
+    UMASK_VALUE = os.umask(0o777)
+    os.umask(UMASK_VALUE)
+    return UMASK_VALUE
+
 class InstallUnmatchedError(click.ClickException):
     """An exception raised when an artifact was not found"""
 
     error = '''Source path(s) did not match any files/non-empty directories in the archive:
   archive: {archive}
   project: {project}
-  job: {job}
   ref: {ref}
+  {entry_id_str}
     {unmatched}'''
 
     def __init__(self, filename, entry, unmatched):
         unmatched_desc = ('{} => {}'.format(src, dst) for src, dst in unmatched.items())
+        if 'commit' in entry:
+            entry_id_str = 'commit: {}'.format(entry["commit"])
+        elif 'job_id' in entry:
+            entry_id_str = 'job: {} (id={})'.format(entry["job"], entry["job_id"])
 
         message = self.error.format(
             archive=_cache.cache_path(filename),
             unmatched='\n    '.join(unmatched_desc),
-            **entry)
+            **entry,
+            entry_id_str=entry_id_str)
 
         super().__init__(message)
 
@@ -62,7 +77,7 @@ class InstallAction():
         """
         return self._match(filepath)
 
-    def install(self, archive, member):
+    def install(self, archive, filepath, member):
         """Perform the install action on a zip archive member
 
         Parameters:
@@ -73,20 +88,24 @@ class InstallAction():
         filemode_str = ""
 
         # Translate the archive path to the install destination
-        target = self.translate(member.filename)
+        target = self.translate(filepath)
 
         # if create_system is Unix (3), external_attr contains filesystem permissions
         if member.create_system == 3:
             filemode = member.external_attr >> 16
+        elif member.is_dir():
+            filemode = (0o777 ^ _get_umask()) | stat.S_IFDIR
+        else:
+            filemode = (0o666 ^ _get_umask()) | stat.S_IFREG
 
-            # Keep only the normal permissions bits;
-            # ignore special bits like setuid, setgid, sticky
-            access = filemode & InstallAction.S_IRWXUGO
-            filemode_str = '   ' + stat.filemode(stat.S_IFMT(filemode) | access)
+        # Keep only the normal permissions bits;
+        # ignore special bits like setuid, setgid, sticky
+        access = filemode & InstallAction.S_IRWXUGO
+        filemode_str = '   ' + stat.filemode(stat.S_IFMT(filemode) | access)
 
-        _termui.echo('* install: %s => %s%s' % (member.filename, target, filemode_str))
+        _termui.echo('* install: %s => %s%s' % (filepath, target, filemode_str))
 
-        if member.filename.endswith('/'):
+        if target.endswith('/'):
             _paths.mkdirs(target)
         else:
             if os.sep in target:
@@ -95,9 +114,8 @@ class InstallAction():
                 with open(target, 'wb') as ftarget:
                     shutil.copyfileobj(fmember, ftarget)
 
-        if access is not None:
-            os.chmod(target, access)
-            
+        os.chmod(target, access)
+
         return target, filemode_str
 
     def __str__(self):

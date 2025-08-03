@@ -38,39 +38,56 @@ def get_ref_last_successful_job(project, ref, job_name):
         jobs = pipeline.jobs.list(as_list=False, scope='success')
         for job in jobs:
             if job.name == job_name:
-                # Turn ProjectPipelineJob into ProjectJob
-                return project.jobs.get(job.id, lazy=True)
+                return job.id, pipeline.sha
 
     raise click.ClickException("Could not find latest successful '{}' job for {} ref {}".format(
         job_name, project.path_with_namespace, ref))
 
-
 def zip_name(entry):
     """Get the cache-relative path to the archive file for an artifacts.yml entry"""
+    source = entry.get('source', 'ci-job')
+    if source == 'ci-job':
+        zip_key = entry['job_id']
+    elif source == 'repository':
+        zip_key = 'repo-{}'.format(entry['commit'])
 
-    return os.path.join(entry['project'], '{}.zip'.format(entry['job_id']))
+    return os.path.join(entry['project'], '{}.zip'.format(zip_key))
 
+def get_short_id(entry):
+    source = entry.get('source', 'ci-job')
+    if source == 'repository':
+        return entry['commit'][:8]
+
+    return entry['job_id']
 
 def download_archive(gitlab, entry, filename):
-    """Download the archive file for an artifacts.yml entry"""
+    """Download the archive file for an artifacts.yml entry to the cache"""
+    source = entry.get('source', 'ci-job')
 
-    _termui.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
+    entry_short_id = get_short_id(entry)
+    if source == 'ci-job':
+        entry_id_str = 'job "{}" (id={})'.format(entry['job'], entry_short_id)
+    elif source == 'repository':
+        entry_id_str = entry['commit']
 
-    fail_msg = 'Failed to download job "%s" (id=%s) from "%s"' % (
-        entry['job'],
-        entry['job_id'],
+    _termui.echo('* %s: %s => downloading...' % (entry['project'], entry_short_id))
+
+    fail_msg = 'Failed to download %s from "%s"' % (
+        entry_id_str,
         entry['project'])
-
     with _gitlab.wrap_errors(gitlab, fail_msg):
         # Use shallow objects for proj and job to allow compatibility with
         # job tokens where only the artifacts endpoint is accessible.
         proj = gitlab.projects.get(entry['project'], lazy=True)
-        job = proj.jobs.get(entry['job_id'], lazy=True)
 
         with _cache.save_file(filename) as fileobj:
-            job.artifacts(streamed=True, action=fileobj.write)
+            if source == 'ci-job':
+                job = proj.jobs.get(entry['job_id'], lazy=True)
+                job.artifacts(streamed=True, action=fileobj.write)
+            elif source == 'repository':
+                proj.repository_archive(streamed=True, action=fileobj.write, sha=entry['commit'], format='zip')
 
-    _termui.echo('* %s: %s => downloaded.' % (entry['project'], entry['job_id']))
+    _termui.echo('* %s: %s => downloaded.' % (entry['project'], entry_short_id))
 
 
 def get_cached_archive(gitlab, entry):
@@ -83,6 +100,7 @@ def get_cached_archive(gitlab, entry):
         pass
 
     download_archive(gitlab, entry, filename)
+
     try:
         return _cache.get(filename)
     except KeyError as exc:
@@ -129,16 +147,33 @@ def update():
         raise click.ClickException('The %s file was not found or did not contain any entries' % _paths.artifacts_file)
 
     for entry in artifacts:
-        fail_msg = 'Failed to get last successful "%s" job for "%s" ref "%s"' % (
-            entry['job'],
-            entry['project'],
-            entry['ref'])
-        with _gitlab.wrap_errors(gitlab, fail_msg):
-            proj = gitlab.projects.get(entry['project'])
-            entry['job_id'] = get_ref_last_successful_job(proj, entry['ref'], entry['job']).id
+        project = entry.get('project', None)
+        ref = entry.get('ref', None)
+        source = entry.get('source', 'ci-job')
 
-        _termui.echo('* %s: %s => %s' % (
-            entry['project'], entry['ref'], entry['job_id']), sys.stderr)
+        if source == 'ci-job':
+            job = entry.get('job', None)
+            if not job:
+                raise click.ClickException('No job was specified for project "%s" ref "%s"' % (project, ref))
+
+            # Get the latest job ID for "ci-job" sources
+            fail_msg = 'Failed to get last successful "%s" job for "%s" ref "%s"' % (
+                job,
+                project,
+                ref)
+            with _gitlab.wrap_errors(gitlab, fail_msg):
+                proj = gitlab.projects.get(project)
+                job_id, commit = get_ref_last_successful_job(proj, ref, job)
+                entry['job_id'] = job_id
+                entry['commit'] = commit
+        elif source == 'repository':
+            # Resolve the ref to a commit for "repository" sources
+            fail_msg = 'Failed to find ref "%s" for "%s"' % (ref, project)
+            with _gitlab.wrap_errors(gitlab, fail_msg):
+                proj = gitlab.projects.get(project)
+                entry['commit'] = proj.commits.get(ref).id
+
+        _termui.echo('* %s: %s => %s' % (project, ref, get_short_id(entry)))
 
     _yaml.save(_paths.artifacts_lock_file, artifacts)
 
@@ -154,8 +189,9 @@ def download():
 
     for entry in artifacts_lock:
         filename = zip_name(entry)
+
         if _cache.contains(filename):
-            _termui.echo('* %s: %s => present' % (entry['project'], entry['job_id']))
+            _termui.echo('* %s: %s => present' % (entry['project'], get_short_id(entry)))
             continue
 
         download_archive(gitlab, entry, filename)
@@ -181,8 +217,11 @@ def install(keep_empty_dirs, output_json):
     # entry["files"]: Files within the artifact that match the install requests
     #                 and will be installed by "art install".
     for entry in artifacts_lock:
+        source = entry.get('source', 'ci-job')
+
         # files installed for this entry
         entry['files'] = []
+
         # dictionary of src:dest pairs representing artifacts to install
         # make a copy as to not modify the original `artifact_lock` object
         install_requests = entry['install'].copy()
@@ -196,22 +235,28 @@ def install(keep_empty_dirs, output_json):
 
         # iterate over the zip archive
         for member in archive.infolist():
+            filepath = member.filename
+
             # Skip directory members
             # - Parent directories are created when installing files
             # - The keep_empty_dirs option preserves the original archive tree
-            if not keep_empty_dirs and member.filename.endswith('/'):
+            if not keep_empty_dirs and filepath.endswith('/'):
                 continue
+
+            # strip leading directory from repository archives
+            if source == 'repository':
+                filepath = _paths.strip_components(filepath, 1)
 
             # perform installs that match this member
             for action in actions:
-                if not action.match(member.filename):
+                if not action.match(filepath):
                     continue
 
-                installed_target, filemode_str = action.install(archive, member)
+                installed_target, filemode_str = action.install(archive, filepath, member)
 
                 # remove requests that are successfully installed
                 install_requests.pop(action.src, None)
-                
+
                 # add entry for this file/directory to the entry (to be used in the JSON output)
                 entry['files'].append(installed_target)
 
