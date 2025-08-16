@@ -16,6 +16,7 @@ from . import _cache
 from . import _config
 from . import _install
 from . import _paths
+from . import _termui
 from . import _yaml
 from . import __version__ as version
 
@@ -85,7 +86,7 @@ def zip_name(entry):
 def download_archive(gitlab, entry, filename):
     """Download the archive file for an artifacts.yml entry"""
 
-    click.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
+    _termui.echo('* %s: %s => downloading...' % (entry['project'], entry['job_id']))
 
     fail_msg = 'Failed to download job "%s" (id=%s) from "%s"' % (
         entry['job'],
@@ -101,7 +102,7 @@ def download_archive(gitlab, entry, filename):
         with _cache.save_file(filename) as fileobj:
             job.artifacts(streamed=True, action=fileobj.write)
 
-    click.echo('* %s: %s => downloaded.' % (entry['project'], entry['job_id']))
+    _termui.echo('* %s: %s => downloaded.' % (entry['project'], entry['job_id']))
 
 
 def get_cached_archive(gitlab, entry):
@@ -168,7 +169,7 @@ def update():
             proj = gitlab.projects.get(entry['project'])
             entry['job_id'] = get_ref_last_successful_job(proj, entry['ref'], entry['job']).id
 
-        click.echo('* %s: %s => %s' % (
+        _termui.echo('* %s: %s => %s' % (
             entry['project'], entry['ref'], entry['job_id']), sys.stderr)
 
     _yaml.save(_paths.artifacts_lock_file, artifacts)
@@ -186,7 +187,7 @@ def download():
     for entry in artifacts_lock:
         filename = zip_name(entry)
         if _cache.contains(filename):
-            click.echo('* %s: %s => present' % (entry['project'], entry['job_id']))
+            _termui.echo('* %s: %s => present' % (entry['project'], entry['job_id']))
             continue
 
         download_archive(gitlab, entry, filename)
@@ -198,6 +199,9 @@ def install(keep_empty_dirs, output_json):
     """Install artifacts to current directory."""
 
     gitlab = get_gitlab()
+    if output_json:
+        _termui.silent = True
+
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
     if not artifacts_lock:
         raise click.ClickException('No entries in %s file. Run "art update" first.' % _paths.artifacts_lock_file)
