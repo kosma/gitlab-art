@@ -6,9 +6,9 @@ import os
 
 import click
 
+from . import _oauth
 from . import _paths
 from . import _yaml
-
 
 class ConfigException(click.ClickException):
     """An exception caused by invalid configuration settings."""
@@ -16,14 +16,18 @@ class ConfigException(click.ClickException):
         msg = 'config.{}: {}'.format(config_key, message)
         super().__init__(msg)
 
-def save(gitlab_url, token_type, token):
+def save(gitlab_url, token_type, token_or_client_id):
     config = {
-        'gitlab_url': gitlab_url,
-        'token_type': token_type,
-        'token': token,
-    }
-    _paths.mkdirs(os.path.dirname(_paths.config_file))
-    _yaml.save(_paths.config_file, config)
+            "gitlab_url": gitlab_url,
+            "token_type": token_type,
+        }
+    if token_type == 'oauth':
+        config['oauth_client_id'] = token_or_client_id
+        config['token'], config['refresh_token'] = _oauth.authorize(gitlab_url, token_or_client_id)
+    else:
+        config['token'] = token_or_client_id
+
+    write(config)
 
 def load():
     config = _yaml.load(_paths.config_file)
@@ -40,7 +44,6 @@ def load():
 
 def migrate(config):
     """Perform conversions to maintain backwards-compatibility"""
-
     # migrate legacy private_token value if it can be
     # done without overwriting an existing value
     if 'private_token' in config and 'token' not in config:
@@ -51,9 +54,23 @@ def migrate(config):
     if 'token_type' not in config:
         config['token_type'] = 'private'
 
+def refresh_token(config):
+    """Use the OAuth refresh token to update an expired access token"""
+    access_token, refresh_token = _oauth.refresh(
+        config["gitlab_url"],
+        config["oauth_client_id"],
+        config["refresh_token"])
+
+    # Save updated refresh token on success
+    if refresh_token:
+        config["token"] = access_token
+        config["refresh_token"] = refresh_token
+        write(config)
+
+    return access_token
+
 def validate(config):
     """Ensure the configuration meets expectations"""
-
     required_fields = ('token', 'token_type', 'gitlab_url')
     for field in required_fields:
         if field not in config:
@@ -65,3 +82,8 @@ def validate(config):
         click.secho('Warning: ', nl=False, fg='yellow')
         click.echo('Config includes both "token" and "private_token" elements. ', nl=False)
         click.echo('Only the "token" value will be used.')
+
+def write(config):
+    """Save the current configuration to disk"""
+    _paths.mkdirs(os.path.dirname(_paths.config_file))
+    _yaml.save(_paths.config_file, config)
