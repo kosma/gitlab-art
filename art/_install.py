@@ -9,6 +9,7 @@ import click
 
 from . import _cache
 from . import _paths
+from . import _termui
 
 class InstallUnmatchedError(click.ClickException):
     """An exception raised when an artifact was not found"""
@@ -83,7 +84,7 @@ class InstallAction():
             access = filemode & InstallAction.S_IRWXUGO
             filemode_str = '   ' + stat.filemode(stat.S_IFMT(filemode) | access)
 
-        click.echo('* install: %s => %s%s' % (member.filename, target, filemode_str))
+        _termui.echo('* install: %s => %s%s' % (member.filename, target, filemode_str))
 
         if member.filename.endswith('/'):
             _paths.mkdirs(target)
@@ -96,6 +97,8 @@ class InstallAction():
 
         if access is not None:
             os.chmod(target, access)
+            
+        return target, filemode_str
 
     def __str__(self):
         return '{} => {}'.format(self.src, self.dest)
