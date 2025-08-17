@@ -3,6 +3,7 @@
 from __future__ import absolute_import
 
 import os
+import stat
 import sys
 import zipfile
 import json
@@ -52,6 +53,68 @@ def zip_name(entry):
         zip_key = 'repo-{}'.format(entry['commit'])
 
     return os.path.join(entry['project'], '{}.zip'.format(zip_key))
+
+def canonical_request_path(entry, path):
+    """Get the install request path from an archive path"""
+    source = entry.get('source', 'ci-job')
+
+    # strip leading directory from repository archive paths
+    # a repository archive includes a top-level directory based on the project name and git ref
+    # this is undesirable for artifacts.yml because install request paths would have to be updated
+    # whenever the project's ref is updated.
+    if source == 'repository':
+        return _paths.strip_components(path, 1)
+
+    return path
+
+def get_files_for_entry(gitlab, entry, keep_empty_dirs):
+    """Build the list of archive files that match the install requests for an entry"""
+    files = {}
+
+    # Explanation of relevant keys for each entry:
+    #
+    # entry["install"]: Requests to install files that match the indicated
+    #                   source pattern, from the artifact to the target location.
+    # entry["files"]: Files within the artifact that match the install requests
+    #                 and will be installed by "art install".
+    # dictionary of src:dest pairs representing artifacts to install
+    # make a copy as to not modify the original `artifact_lock` object
+    install_requests = entry['install'].copy()
+
+    # create an InstallAction (file match and translate) for each request
+    actions = [_install.InstallAction(src, dest) for src, dest in install_requests.items()]
+
+    # open the artifacts.zip archive
+    with get_cached_archive(gitlab, entry) as archive_file:
+        with zipfile.ZipFile(archive_file) as archive:
+            # iterate over the zip archive
+            for member in archive.infolist():
+                filepath = member.filename
+
+                # Skip directory members
+                # - Parent directories are created when installing files
+                # - The keep_empty_dirs option allows an install request to match and create an empty directory
+                if not keep_empty_dirs and filepath.endswith('/'):
+                    continue
+
+                # Canonicalize the archive path before matching the install request
+                filepath = canonical_request_path(entry, filepath)
+
+                # Check if this file matches an install request
+                for action in actions:
+                    if not action.match(filepath):
+                        continue
+
+                    files[member.filename] = action.translate(filepath)
+
+                    # Remove the install request from the list now that it's been fulfilled
+                    install_requests.pop(action.src, None)
+
+    # Report an error if any requested files were not found in the source archive
+    if install_requests:
+        raise _install.InstallUnmatchedError(zip_name(entry), entry, install_requests)
+
+    return files
 
 def get_short_id(entry):
     source = entry.get('source', 'ci-job')
@@ -132,8 +195,13 @@ def configure(**kwargs):
 
 
 @main.command()
-def update():
+@click.option('--keep-empty-dirs', '-k', default=False, is_flag=True, help='Do not prune empty directories.')
+@click.option('--json', '-j', 'output_json', default=False, is_flag=True, help='Output artifact information to JSON')
+def update(keep_empty_dirs, output_json):
     """Update latest tag/branch job IDs."""
+
+    if output_json:
+        _termui.silent = True
 
     gitlab = _gitlab.get()
 
@@ -173,9 +241,16 @@ def update():
                 proj = gitlab.projects.get(project)
                 entry['commit'] = proj.commits.get(ref).id
 
+        # Process the artifact and find files that match the install requests
+        entry['files'] = get_files_for_entry(gitlab, entry, keep_empty_dirs)
+
         _termui.echo('* %s: %s => %s' % (project, ref, get_short_id(entry)))
 
     _yaml.save(_paths.artifacts_lock_file, artifacts)
+
+    if output_json:
+        json.dump(artifacts, sys.stdout, indent=2)
+        sys.stdout.write(os.linesep)
 
 
 @main.command()
@@ -197,7 +272,7 @@ def download():
         download_archive(gitlab, entry, filename)
 
 @main.command()
-@click.option('--keep-empty-dirs', '-k', default=False, is_flag=True, help='Do not prune empty directories.')
+@click.option('--keep-empty-dirs', '-k', default=False, is_flag=True, hidden=True, help='Do not prune empty directories.')
 @click.option('--json', '-j', 'output_json', default=False, is_flag=True, help='Output artifact information to JSON')
 def install(keep_empty_dirs, output_json):
     """Install artifacts to current directory."""
@@ -209,65 +284,40 @@ def install(keep_empty_dirs, output_json):
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
     if not artifacts_lock:
         raise click.ClickException('No entries in %s file. Run "art update" first.' % _paths.artifacts_lock_file)
-    
-    # Explanation of relevant keys for each entry:
-    #
-    # entry["install"]: Requests to install files that match the indicated
-    #                   source pattern, from the artifact to the target location.
-    # entry["files"]: Files within the artifact that match the install requests
-    #                 and will be installed by "art install".
+
     for entry in artifacts_lock:
-        source = entry.get('source', 'ci-job')
+        # The list of matching files is recorded by art update, but older artifacts.lock.yml
+        # files may be missing this attribute. Create it now, if necessary.
+        #
+        # --keep-empty-dirs is a deprecated install option, as it has moved to "art update". If
+        # a user specified it here, they may be expecting an older art version and may not have included
+        # the option during "art update". Rebuild the files list to ensure the option isn't ignored.
+        files = entry.get('files', None)
+        if not files or keep_empty_dirs:
+            files = get_files_for_entry(gitlab, entry, keep_empty_dirs)
 
-        # files installed for this entry
-        entry['files'] = []
+        with get_cached_archive(gitlab, entry) as archive_file:
+            with zipfile.ZipFile(archive_file) as archive:
+                permissions = {}
+                for filepath, target in files.items():
+                    try:
+                        member = archive.getinfo(filepath)
+                    except KeyError as exc:
+                        raise _install.InstallUnmatchedError(zip_name(entry), entry, {filepath: target}) from exc
 
-        # dictionary of src:dest pairs representing artifacts to install
-        # make a copy as to not modify the original `artifact_lock` object
-        install_requests = entry['install'].copy()
+                    target, filemode =  _install.install(archive, member, target)
 
-        # create an InstallAction (file match and translate) for each request
-        actions = [_install.InstallAction(src, dest) for src, dest in install_requests.items()]
+                    # File permissions are applied in a second pass. This prevents restrictive
+                    # permissions from preventing extraction (e.g. a non-empty, read-only directory)
+                    # without requiring depth-first traversal
+                    permissions[target] = filemode
 
-        # open the artifacts.zip archive
-        archive_file = get_cached_archive(gitlab, entry)
-        archive = zipfile.ZipFile(archive_file)
+                    filemode_str = '   ' + stat.filemode(filemode)
+                    request_path = canonical_request_path(entry, filepath)
+                    _termui.echo('* install: %s => %s%s' % (request_path, target, filemode_str))
 
-        # iterate over the zip archive
-        for member in archive.infolist():
-            filepath = member.filename
-
-            # Skip directory members
-            # - Parent directories are created when installing files
-            # - The keep_empty_dirs option preserves the original archive tree
-            if not keep_empty_dirs and filepath.endswith('/'):
-                continue
-
-            # strip leading directory from repository archives
-            if source == 'repository':
-                filepath = _paths.strip_components(filepath, 1)
-
-            # perform installs that match this member
-            for action in actions:
-                if not action.match(filepath):
-                    continue
-
-                installed_target, filemode_str = action.install(archive, filepath, member)
-
-                # remove requests that are successfully installed
-                install_requests.pop(action.src, None)
-
-                # add entry for this file/directory to the entry (to be used in the JSON output)
-                entry['files'].append(installed_target)
-
-        # Close zip and archive file
-        # No try/finally/with here to reduce nesting, we'd exit anyway
-        archive.close()
-        archive_file.close()
-
-        # Report an error if any requested artifacts were not installed
-        if install_requests:
-            raise _install.InstallUnmatchedError(zip_name(entry), entry, install_requests)
+                for target, filemode in permissions.items():
+                    os.chmod(target, filemode)
 
     if output_json:
         json.dump(artifacts_lock, sys.stdout, indent=2)
