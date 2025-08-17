@@ -9,7 +9,6 @@ import click
 
 from . import _cache
 from . import _paths
-from . import _termui
 
 UMASK_VALUE = -1
 def _get_umask():
@@ -77,46 +76,37 @@ class InstallAction():
         """
         return self._match(filepath)
 
-    def install(self, archive, filepath, member):
-        """Perform the install action on a zip archive member
-
-        Parameters:
-        archive     Archive from which to extract the file
-        member      ZipInfo identifying the file to install
-        """
-        access = None
-        filemode_str = ""
-
-        # Translate the archive path to the install destination
-        target = self.translate(filepath)
-
-        # if create_system is Unix (3), external_attr contains filesystem permissions
-        if member.create_system == 3:
-            filemode = member.external_attr >> 16
-        elif member.is_dir():
-            filemode = (0o777 ^ _get_umask()) | stat.S_IFDIR
-        else:
-            filemode = (0o666 ^ _get_umask()) | stat.S_IFREG
-
-        # Keep only the normal permissions bits;
-        # ignore special bits like setuid, setgid, sticky
-        access = filemode & InstallAction.S_IRWXUGO
-        filemode_str = '   ' + stat.filemode(stat.S_IFMT(filemode) | access)
-
-        _termui.echo('* install: %s => %s%s' % (filepath, target, filemode_str))
-
-        if target.endswith('/'):
-            _paths.mkdirs(target)
-        else:
-            if os.sep in target:
-                _paths.mkdirs(os.path.dirname(target))
-            with archive.open(member) as fmember:
-                with open(target, 'wb') as ftarget:
-                    shutil.copyfileobj(fmember, ftarget)
-
-        os.chmod(target, access)
-
-        return target, filemode_str
-
     def __str__(self):
         return '{} => {}'.format(self.src, self.dest)
+
+def install(archive, member, target):
+    """Perform the install action on a zip archive member
+
+    Parameters:
+    archive     Archive from which to extract the file
+    member      ZipInfo identifying the file to install
+    target      Destination file path
+    """
+    # if create_system is Unix (3), external_attr contains filesystem permissions
+    if member.create_system == 3:
+        filemode = member.external_attr >> 16
+    elif member.is_dir():
+        filemode = (0o777 ^ _get_umask()) | stat.S_IFDIR
+    else:
+        filemode = (0o666 ^ _get_umask()) | stat.S_IFREG
+
+    # Keep only the normal permissions bits;
+    # ignore special bits like setuid, setgid, sticky
+    access = filemode & InstallAction.S_IRWXUGO
+    filemode = stat.S_IFMT(filemode) | access
+
+    if target.endswith('/'):
+        _paths.mkdirs(target)
+    else:
+        if os.sep in target:
+            _paths.mkdirs(os.path.dirname(target))
+        with archive.open(member) as fmember:
+            with open(target, 'wb') as ftarget:
+                shutil.copyfileobj(fmember, ftarget)
+
+    return target, filemode
