@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+import math
 import os
 import stat
 import sys
@@ -322,3 +323,60 @@ def install(keep_empty_dirs, output_json):
     if output_json:
         json.dump(artifacts_lock, sys.stdout, indent=2)
         sys.stdout.write(os.linesep)
+
+@main.command()
+@click.option('--sort-size', '-s', default=False, is_flag=True, help='Sort results by size')
+@click.option('--human-readable', '-h', default=False, is_flag=True, help='Print sizes with units rather than bytes')
+@click.option('--purge', multiple=True, metavar='PROJECT_NAME', type=str, help='Remove cached artifacts for the specified project. Can be provided more than once.')
+@click.option('--purge-all', default=False, is_flag=True, help='Remove cached artifacts for all projects')
+def cache(sort_size, human_readable, purge, purge_all):
+    archives = _cache.list()
+
+    if purge or purge_all:
+        purge_cache(archives, purge, purge_all)
+        return
+
+    sort_key = lambda item: item[0]
+    if sort_size:
+        sort_key = lambda item: item[1]['size']
+    sorted_archives = sorted(archives.items() , key=sort_key, reverse=sort_size)
+
+    # convert sizes as string
+    for project in archives:
+        size = archives[project]['size']
+        if human_readable:
+            units = ['B', 'K', 'M', 'G', 'T', 'P']
+            unit = int(math.log2(size) // math.log2(1024))
+            archives[project]['size'] = '{:0.1f}{}'.format(size / (1024 ** unit), units[unit])
+        else:
+            archives[project]['size'] = str(size)
+
+    # calculate column sizes for justification
+    column_sizes = [len('PROJECT'), len('SIZE')]
+    for project in archives:
+        name_len = len(project)
+        if name_len > column_sizes[0]:
+            column_sizes[0] = name_len
+        size_len = len(archives[project]['size'])
+        if size_len > column_sizes[1]:
+            column_sizes[1] = size_len
+
+    print("PROJECT".ljust(column_sizes[0]), end="\t")
+    print("SIZE".rjust(column_sizes[1]))
+    for project in dict(sorted_archives):
+        print(project.ljust(column_sizes[0]), end="\t")
+        print(archives[project]['size'].rjust(column_sizes[1]))
+
+def purge_cache(archives, projects, purge_all):
+    if not purge_all:
+        archives = {project:value for project, value in archives.items() if project in projects}
+
+    missing_projects = [name for name in projects if name not in archives]
+    if missing_projects:
+        missing_str = '\n    '.join(missing_projects)
+        raise click.ClickException("No cached files were found for the projects:\n    {}".format(missing_str))
+
+    for project in archives:
+        for filepath in archives[project]['files']:
+            os.remove(filepath)
+            _termui.echo('* %s: %s => removed.' % (project, os.path.basename(filepath)))

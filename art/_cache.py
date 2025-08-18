@@ -5,6 +5,8 @@ from contextlib import contextmanager
 
 import errno
 import os
+import stat
+
 from . import _paths
 
 
@@ -39,3 +41,17 @@ def get(filename):
             raise KeyError(filename) from exc
         else:
             raise
+
+def list():
+    archives = {}
+    for basepath, _, files in os.walk(_paths.cache_dir):
+        for file in files:
+            project = basepath.removeprefix(_paths.cache_dir).lstrip('/')
+            if project not in archives:
+                archives[project] = { 'files': [], 'size': 0 }
+
+            archive_path = os.path.join(basepath, file)
+            archives[project]['files'].append(archive_path)
+            archives[project]['size'] += os.path.getsize(archive_path)
+
+    return archives
