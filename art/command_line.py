@@ -277,9 +277,10 @@ def download():
 def install(keep_empty_dirs, output_json):
     """Install artifacts to current directory."""
 
-    gitlab = _gitlab.get()
     if output_json:
         _termui.silent = True
+
+    gitlab = _gitlab.get()
 
     artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
     if not artifacts_lock:
