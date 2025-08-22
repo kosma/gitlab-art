@@ -22,7 +22,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         'PyYAML',
-        'appdirs',
+        'platformdirs',
         'click',
         'python-gitlab>=1.12.0',
     ],

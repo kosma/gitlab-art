@@ -107,7 +107,7 @@ art install --json
 
 ## File locations
 
-`art` uses [appdirs](https://github.com/ActiveState/appdirs) to store configuration
+`art` uses [platformdirs](https://github.com/tox-dev/platformdirs) to store configuration
 and cache files. When running under CI environment, the default cache directory is
 automatically set to `.art-cache` so it can be preserved across jobs.
 
