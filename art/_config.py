@@ -8,6 +8,7 @@ import click
 
 from . import _oauth
 from . import _paths
+from . import _termui
 from . import _yaml
 
 class ConfigException(click.ClickException):
@@ -79,9 +80,9 @@ def validate(config):
     # warn the user if they have both private_token and token configured
     # the private_token element is a legacy field and should be removed
     if 'private_token' in config and 'token' in config:
-        click.secho('Warning: ', nl=False, fg='yellow')
-        click.echo('Config includes both "token" and "private_token" elements. ', nl=False)
-        click.echo('Only the "token" value will be used.')
+        _termui.secho('Warning: ', nl=False, fg='yellow', err=True)
+        _termui.echo('Config includes both "token" and "private_token" elements. ', nl=False, err=True)
+        _termui.echo('Only the "token" value will be used.', err=True)
 
 def write(config):
     """Save the current configuration to disk"""

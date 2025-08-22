@@ -11,3 +11,9 @@ def echo(*args, **kwargs):
 
     if not silent:
         click.echo(*args, **kwargs)
+
+def secho(*args, **kwargs):
+    global silent
+
+    if not silent:
+        click.secho(*args, **kwargs)
