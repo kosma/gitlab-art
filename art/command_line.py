@@ -2,6 +2,8 @@
 
 from __future__ import absolute_import
 
+import fnmatch
+import math
 import os
 import stat
 import sys
@@ -323,3 +325,76 @@ def install(keep_empty_dirs, output_json):
     if output_json:
         json.dump(artifacts_lock, sys.stdout, indent=2)
         sys.stdout.write(os.linesep)
+
+@main.group()
+def cache():
+    """Inspect and manage the artifact cache"""
+    pass
+
+@cache.command()
+@click.option('--sort-size', '-s', default=False, is_flag=True, help='Sort results by size')
+@click.option('--human-readable', '-h', default=False, is_flag=True, help='Print sizes with units rather than bytes')
+def list(sort_size, human_readable):
+    """List projects with cached artifacts and their size"""
+    archives = _cache.list()
+
+    sort_key = lambda item: item[0]
+    if sort_size:
+        sort_key = lambda item: item[1]['size']
+    sorted_archives = sorted(archives.items() , key=sort_key, reverse=sort_size)
+
+    # convert sizes as string
+    for project in archives:
+        size = archives[project]['size']
+        if human_readable:
+            units = ['B', 'K', 'M', 'G', 'T', 'P']
+            unit = int(math.log2(size) // math.log2(1024))
+            archives[project]['size'] = '{:0.1f}{}'.format(size / (1024 ** unit), units[unit])
+        else:
+            archives[project]['size'] = str(size)
+
+    # calculate column sizes for justification
+    column_sizes = [len('PROJECT'), len('SIZE')]
+    for project in archives:
+        name_len = len(project)
+        if name_len > column_sizes[0]:
+            column_sizes[0] = name_len + 1
+        size_len = len(archives[project]['size'])
+        if size_len > column_sizes[1]:
+            column_sizes[1] = size_len + 1
+
+    _termui.echo("PROJECT".ljust(column_sizes[0]), nl=False)
+    _termui.echo("SIZE".rjust(column_sizes[1]))
+    for project in dict(sorted_archives):
+        _termui.echo(project.ljust(column_sizes[0]), nl=False)
+        _termui.echo(archives[project]['size'].rjust(column_sizes[1]))
+
+@cache.command()
+@click.argument('patterns', metavar='PATTERN', nargs=-1)
+@click.option('-d', '--dry-run', default=False, is_flag=True, help='Report artificats that would be removed without removing them')
+def purge(patterns, dry_run):
+    """Remove cached artifacts. PATTERN can be a project path or shell-style glob expression."""
+    archives = _cache.list()
+
+    if not patterns:
+        to_remove = archives.keys()
+    else:
+        to_remove = []
+        unmatched_patterns = []
+        for glob in patterns:
+            matched = fnmatch.filter(archives.keys(), glob)
+            if matched:
+                to_remove = to_remove + matched
+            else:
+                unmatched_patterns.append(glob)
+
+        if unmatched_patterns:
+            msg = '\n    '.join(unmatched_patterns)
+            raise click.ClickException("No cached files were found for projects matching:\n    {}".format(msg))
+
+    action = "would be removed" if dry_run else "removed"
+    for project in set(to_remove):
+        for filepath in archives[project]['files']:
+            if not dry_run:
+                os.remove(filepath)
+            _termui.echo('* %s: %s => %s.' % (project, os.path.basename(filepath), action))
