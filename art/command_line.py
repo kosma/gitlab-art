@@ -175,8 +175,19 @@ def get_cached_archive(gitlab, entry):
 @click.group()
 @click.version_option(version, prog_name='art')
 @click.option('--cache', '-c', help='Download cache directory.')
-def main(cache):
+@click.option('--change-dir', '-C', metavar='DIR', type=click.Path(exists=True, file_okay=False, resolve_path=True),  help='Run as if art was started from DIR')
+@click.option('--file', '-f', metavar='FILE', type=click.Path(dir_okay=False), help='Use FILE as artifacts.yml')
+def main(cache=None, change_dir=None, file=None):
     """Art, the Gitlab artifact repository client."""
+
+    if change_dir:
+        os.chdir(change_dir)
+
+    if file:
+        if not os.path.exists(file):
+            raise click.ClickException('The file "%s" was not found' % os.path.abspath(file))
+        _paths.artifacts_file = file
+        _paths.artifacts_lock_file = _paths.lockfile(file)
 
     # we change the default when running under CI...
     if 'GITLAB_CI' in os.environ:

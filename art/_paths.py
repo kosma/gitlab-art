@@ -37,3 +37,12 @@ def mkdirs(path):
     except OSError as exc:
         if exc.errno != errno.EEXIST:
             raise
+
+def lockfile(path):
+    """Get lock file path from an artifacts.yml path"""
+    if path.endswith('.yml'):
+        return path[:-4]+'.lock.yml'
+    elif path.endswith('.yaml'):
+        return path[:-5]+'.lock.yaml'
+
+    return path+'.lock'
