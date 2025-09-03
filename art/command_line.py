@@ -210,11 +210,16 @@ def configure(**kwargs):
 @main.command()
 @click.option('--keep-empty-dirs', '-k', default=False, is_flag=True, help='Do not prune empty directories.')
 @click.option('--json', '-j', 'output_json', default=False, is_flag=True, help='Output artifact information to JSON')
-def update(keep_empty_dirs, output_json):
+@click.option('-c', '--clean', default=False, is_flag=True, help='Remove installed files before updating lock file')
+def update(keep_empty_dirs, output_json, clean):
     """Update latest tag/branch job IDs."""
 
     if output_json:
         _termui.silent = True
+
+    if clean:
+        artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
+        remove_installed_files(artifacts_lock, False)
 
     gitlab = _gitlab.get()
 
@@ -337,6 +342,39 @@ def install(keep_empty_dirs, output_json):
         json.dump(artifacts_lock, sys.stdout, indent=2)
         sys.stdout.write(os.linesep)
 
+def remove_installed_files(artifacts_lock, dry_run):
+    """Remove files installed via art install"""
+    if not artifacts_lock:
+        return
+
+    action = "would be removed" if dry_run else "removed"
+    for entry in artifacts_lock:
+        project = entry.get('project')
+        files = entry.get('files', None)
+
+        # Build file list if the lock file was created from older art
+        if not files:
+            gitlab = _gitlab.get()
+            files = get_files_for_entry(gitlab, entry, False)
+
+        for _, target in files.items():
+            if not os.path.exists(target):
+                continue
+
+            if not dry_run:
+                _paths.remove(target)
+            _termui.echo('* %s: %s' % (action, target,))
+
+@main.command()
+@click.option('-d', '--dry-run', default=False, is_flag=True, help='Report artificats that would be removed without removing them')
+def clean(dry_run):
+    """Remove installed files"""
+    artifacts_lock = _yaml.load(_paths.artifacts_lock_file)
+    if not artifacts_lock:
+        raise click.ClickException('No entries in %s file. Run "art update" first.' % _paths.artifacts_lock_file)
+
+    remove_installed_files(artifacts_lock, dry_run)
+
 @main.group()
 def cache():
     """Inspect and manage the artifact cache"""
@@ -407,5 +445,5 @@ def purge(patterns, dry_run):
     for project in set(to_remove):
         for filepath in archives[project]['files']:
             if not dry_run:
-                os.remove(filepath)
+                _paths.remove(filepath)
             _termui.echo('* %s: %s => %s.' % (project, os.path.basename(filepath), action))

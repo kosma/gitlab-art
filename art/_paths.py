@@ -1,6 +1,7 @@
 import errno
 import os
 
+import click
 import platformdirs
 
 
@@ -37,6 +38,15 @@ def mkdirs(path):
     except OSError as exc:
         if exc.errno != errno.EEXIST:
             raise
+
+def remove(path):
+    try:
+        if os.path.isdir(path) and not os.listdir(path):
+            os.rmdir(path)
+        elif os.path.isfile(path):
+            os.remove(path)
+    except PermissionError:
+        raise click.ClickException('Permission denied removing "%s"' % (path,))
 
 def lockfile(path):
     """Get lock file path from an artifacts.yml path"""
