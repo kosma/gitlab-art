@@ -2,6 +2,7 @@
 
 from __future__ import absolute_import
 
+import contextlib
 import fnmatch
 import math
 import os
@@ -39,12 +40,13 @@ def get_ref_last_successful_job(project, ref, job_name):
     pipelines = project.pipelines.list(as_list=False, ref=ref, order_by='id', sort='desc')
     for pipeline in pipelines:
         jobs = pipeline.jobs.list(as_list=False, scope='success')
-        for job in jobs:
-            if job.name == job_name:
-                return job.id, pipeline.sha
-
-    raise click.ClickException("Could not find latest successful '{}' job for {} ref {}".format(
-        job_name, project.path_with_namespace, ref))
+        try:
+            job = next(job for job in jobs if job.name == job_name)
+            artifact = next(artifact for artifact in job.artifacts if artifact['file_type'] == 'archive')
+            return job.id, artifact['filename'], pipeline.sha
+        except StopIteration as err:
+            raise click.ClickException("Could not find latest successful '{}' job for {} ref {}".format(
+                job_name, project.path_with_namespace, ref)) from err
 
 def zip_name(entry):
     """Get the cache-relative path to the archive file for an artifacts.yml entry"""
@@ -55,6 +57,13 @@ def zip_name(entry):
         zip_key = 'repo-{}'.format(entry['commit'])
 
     return os.path.join(entry['project'], '{}.zip'.format(zip_key))
+
+def zip_archive(entry, fileobj):
+    try:
+        return zipfile.ZipFile(fileobj)
+    except zipfile.BadZipFile:
+        archive_path = _cache.cache_path(zip_name(entry))
+        raise click.ClickException('Cannot extract ZIP file "%s" for project "%s"' % (archive_path, entry['project'],))
 
 def canonical_request_path(entry, path):
     """Get the install request path from an archive path"""
@@ -83,8 +92,23 @@ def get_files_for_entry(gitlab, entry, keep_empty_dirs):
     # make a copy as to not modify the original `artifact_lock` object
     install_requests = entry['install'].copy()
 
+    # Determine if the sources need to be extracted from the artifact (default=yes)
+    extract = entry.get('extract', True)
+
     # create an InstallAction (file match and translate) for each request
-    actions = [_install.InstallAction(src, dest) for src, dest in install_requests.items()]
+    actions = [_install.InstallAction(src, dest, extract) for src, dest in install_requests.items()]
+
+    # If extraction is disabled, the source for all actions is the artifact itself
+    if not extract:
+        for action in actions:
+            # Only the "copy all" source is valid for archives that aren't extracted
+            if action.src != '.':
+                raise _install.InstallSourceRequiresExtractionError(entry, action.src, action.dest)
+
+            artifact_filename = entry['filename']
+            files[artifact_filename] = action.translate(artifact_filename)
+
+        return files
 
     # open the artifacts.zip archive
     with get_cached_archive(gitlab, entry) as archive_file:
@@ -172,6 +196,21 @@ def get_cached_archive(gitlab, entry):
         msg = 'File "%s" was not found after download' % _cache.cache_path(filename)
         raise click.ClickException(msg) from exc
 
+@contextlib.contextmanager
+def open_install_source(gitlab, entry):
+    archive = None
+    extract = entry.get('extract', True)
+    try:
+        archive_file =  get_cached_archive(gitlab, entry)
+        if extract:
+            archive = zip_archive(entry, archive_file)
+
+        yield archive_file, archive
+    finally:
+        if archive:
+            archive.close()
+        archive_file.close()
+
 @click.group()
 @click.version_option(version, prog_name='art')
 @click.option('--cache', '-c', help='Download cache directory.')
@@ -249,15 +288,17 @@ def update(keep_empty_dirs, output_json, clean):
                 ref)
             with _gitlab.wrap_errors(gitlab, fail_msg):
                 proj = gitlab.projects.get(project)
-                job_id, commit = get_ref_last_successful_job(proj, ref, job)
+                job_id, filename, commit = get_ref_last_successful_job(proj, ref, job)
                 entry['job_id'] = job_id
                 entry['commit'] = commit
+                entry['filename'] = filename
         elif source == 'repository':
             # Resolve the ref to a commit for "repository" sources
             fail_msg = 'Failed to find ref "%s" for "%s"' % (ref, project)
             with _gitlab.wrap_errors(gitlab, fail_msg):
                 proj = gitlab.projects.get(project)
                 entry['commit'] = proj.commits.get(ref).id
+                entry['filename'] = "{}-{}.zip".format(proj.path, ref)
 
         # Process the artifact and find files that match the install requests
         entry['files'] = get_files_for_entry(gitlab, entry, keep_empty_dirs)
@@ -315,28 +356,24 @@ def install(keep_empty_dirs, output_json):
         if not files or keep_empty_dirs:
             files = get_files_for_entry(gitlab, entry, keep_empty_dirs)
 
-        with get_cached_archive(gitlab, entry) as archive_file:
-            with zipfile.ZipFile(archive_file) as archive:
-                permissions = {}
-                for filepath, target in files.items():
-                    try:
-                        member = archive.getinfo(filepath)
-                    except KeyError as exc:
-                        raise _install.InstallUnmatchedError(zip_name(entry), entry, {filepath: target}) from exc
 
-                    target, filemode =  _install.install(archive, member, target)
 
-                    # File permissions are applied in a second pass. This prevents restrictive
-                    # permissions from preventing extraction (e.g. a non-empty, read-only directory)
-                    # without requiring depth-first traversal
-                    permissions[target] = filemode
+        with open_install_source(gitlab, entry) as (artifact_file, archive):
+            permissions = {}
+            for filepath, target in files.items():
+                target, filemode = _install.install(artifact_file, archive, filepath, target)
 
-                    filemode_str = '   ' + stat.filemode(filemode)
-                    request_path = canonical_request_path(entry, filepath)
-                    _termui.echo('* install: %s => %s%s' % (request_path, target, filemode_str))
+                # File permissions are applied in a second pass. This prevents restrictive
+                # permissions from preventing extraction (e.g. a non-empty, read-only directory)
+                # without requiring depth-first traversal
+                permissions[target] = filemode
 
-                for target, filemode in permissions.items():
-                    os.chmod(target, filemode)
+                filemode_str = '   ' + stat.filemode(filemode)
+                request_path = canonical_request_path(entry, filepath)
+                _termui.echo('* install: %s => %s%s' % (request_path, target, filemode_str))
+
+            for target, filemode in permissions.items():
+                os.chmod(target, filemode)
 
     if output_json:
         json.dump(artifacts_lock, sys.stdout, indent=2)

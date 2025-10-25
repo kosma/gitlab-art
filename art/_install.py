@@ -32,10 +32,10 @@ class InstallUnmatchedError(click.ClickException):
 
     def __init__(self, filename, entry, unmatched):
         unmatched_desc = ('{} => {}'.format(src, dst) for src, dst in unmatched.items())
-        if 'commit' in entry:
-            entry_id_str = 'commit: {}'.format(entry["commit"])
-        elif 'job_id' in entry:
+        if 'job_id' in entry:
             entry_id_str = 'job: {} (id={})'.format(entry["job"], entry["job_id"])
+        elif 'commit' in entry:
+            entry_id_str = 'commit: {}'.format(entry["commit"])
 
         message = self.error.format(
             archive=_cache.cache_path(filename),
@@ -45,19 +45,47 @@ class InstallUnmatchedError(click.ClickException):
 
         super().__init__(message)
 
+class InstallSourceRequiresExtractionError(click.ClickException):
+    """An exception raised when an install source requires extraction, but it is disabled"""
+
+    error = '''Source path "{source_file}" requires artifact extraction, but it is disabled for this item. Use "." to install the unextracted artifact:
+  project: {project}
+  ref: {ref}
+  extract: {extract}
+  {entry_id_str}
+    {source_file} => {target_file}'''
+
+    def __init__(self, entry, source, target):
+        if 'job_id' in entry:
+            entry_id_str = 'job: {} (id={})'.format(entry["job"], entry["job_id"])
+        elif 'commit' in entry:
+            entry_id_str = 'commit: {}'.format(entry["commit"])
+
+        message = self.error.format(
+            source_file=source,
+            target_file=target,
+            **entry,
+            entry_id_str=entry_id_str)
+
+        super().__init__(message)
+
+
 class InstallAction():
     """Represents a user request to install a file from an artifact archive"""
 
     S_IRWXUGO = 0o0777
 
-    def __init__(self, source, destination):
+    def __init__(self, source, destination, extract):
         self.src = source
         self.dest = destination
 
         if source == '.':
             # "copy all" filter
             self._match = lambda f: True
-            self.translate = lambda f: os.path.join(self.dest, f)
+            if extract or self.dest.endswith(os.path.sep):
+                self.translate = lambda f: os.path.join(self.dest, f)
+            else:
+                self.translate = lambda f: self.dest
         elif source.endswith('/'):
             # 1:1 directory filter
             self._match = lambda f: f.startswith(self.src)
@@ -79,14 +107,13 @@ class InstallAction():
     def __str__(self):
         return '{} => {}'.format(self.src, self.dest)
 
-def install(archive, member, target):
-    """Perform the install action on a zip archive member
 
-    Parameters:
-    archive     Archive from which to extract the file
-    member      ZipInfo identifying the file to install
-    target      Destination file path
+def _source_from_archive(archive, filepath):
     """
+    Open the file, identified by filepath, within a ZIP archive
+    """
+    member = archive.getinfo(filepath)
+
     # if create_system is Unix (3), external_attr contains filesystem permissions
     if member.create_system == 3:
         filemode = member.external_attr >> 16
@@ -95,18 +122,45 @@ def install(archive, member, target):
     else:
         filemode = (0o666 ^ _get_umask()) | stat.S_IFREG
 
-    # Keep only the normal permissions bits;
-    # ignore special bits like setuid, setgid, sticky
-    access = filemode & InstallAction.S_IRWXUGO
-    filemode = stat.S_IFMT(filemode) | access
+    return archive.open(member), filemode
 
-    if target.endswith('/'):
-        _paths.mkdirs(target)
-    else:
-        if os.sep in target:
-            _paths.mkdirs(os.path.dirname(target))
-        with archive.open(member) as fmember:
+
+def install(artifact_file, archive, archive_path, target):
+    """Perform the install action on the artifact or a zip archive member
+
+    If archive is spec
+    Parameters:
+    artifact_file An open fileobj for the artifact to install
+    archive       An optional zip archive for the artifact_file
+    archive_path  The path within archive that identifies the file to install
+    target        Destination file path
+    """
+
+    fsource = None
+    try:
+        # If a ZIP archive is provided, obtain the source file using archive_path
+        # Otherwise the source file is the artifact itself
+        if archive:
+            fsource, filemode = _source_from_archive(archive, archive_path)
+        else:
+            fsource = artifact_file
+            filemode = (0o666 ^ _get_umask()) | stat.S_IFREG
+
+        # Keep only the normal permissions bits;
+        # ignore special bits like setuid, setgid, sticky
+        access = filemode & InstallAction.S_IRWXUGO
+        filemode = stat.S_IFMT(filemode) | access
+
+        if target.endswith('/'):
+            _paths.mkdirs(target)
+        else:
+            if os.sep in target:
+                _paths.mkdirs(os.path.dirname(target))
             with open(target, 'wb') as ftarget:
-                shutil.copyfileobj(fmember, ftarget)
+                shutil.copyfileobj(fsource, ftarget)
+    finally:
+        # Only close files we opened
+        if fsource != artifact_file:
+            fsource.close()
 
     return target, filemode
