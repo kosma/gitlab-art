@@ -299,6 +299,8 @@ def update(keep_empty_dirs, output_json, clean):
                 proj = gitlab.projects.get(project)
                 entry['commit'] = proj.commits.get(ref).id
                 entry['filename'] = "{}-{}.zip".format(proj.path, ref)
+        else:
+            raise click.ClickException('Unknown artifact source: "%s"' % (source,))
 
         # Process the artifact and find files that match the install requests
         entry['files'] = get_files_for_entry(gitlab, entry, keep_empty_dirs)
