@@ -36,6 +36,8 @@ class InstallUnmatchedError(click.ClickException):
             entry_id_str = 'job: {} (id={})'.format(entry["job"], entry["job_id"])
         elif 'commit' in entry:
             entry_id_str = 'commit: {}'.format(entry["commit"])
+        elif 'package' in entry:
+            entry_id_str = 'package: {} (id={})'.format(entry["package"], entry["package_file_id"])
 
         message = self.error.format(
             archive=_cache.cache_path(filename),
@@ -60,6 +62,8 @@ class InstallSourceRequiresExtractionError(click.ClickException):
             entry_id_str = 'job: {} (id={})'.format(entry["job"], entry["job_id"])
         elif 'commit' in entry:
             entry_id_str = 'commit: {}'.format(entry["commit"])
+        elif 'package' in entry:
+            entry_id_str = 'package: {} (id={})'.format(entry["package"], entry["package_file_id"])
 
         message = self.error.format(
             source_file=source,
