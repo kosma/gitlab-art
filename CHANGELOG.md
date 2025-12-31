@@ -12,6 +12,8 @@ A summary of significant changes within each version of `gitlab-art`.
 - ENH: New `art clean` command and `art update --clean` can be used to remove installed files.
 - ENH: The `art` command includes a top-level `-C, --change-dir DIR` option to set the working directory before loading `artifacts.yml` and installing files.
 - ENH: The `art` command incluces a top-level `-f, --file FILE` option to specify a different name or path to the `artifacts.yml` file.
+- ENH: Require Python >=3.7
+- ENH: Require python-gitlab >=3.12.0
 - BUG: The `appdirs` project has been replaced with `platformdirs`
 
 ## v0.4.0
