@@ -326,24 +326,25 @@ def update(keep_empty_dirs, output_json, clean):
 
             filename = entry.get('filename', None)
             if not filename:
-                raise click.ClickException('No filename was specified for package "%s" of project "%s" ref "%s"' % (package, project, ref))
+                raise click.ClickException('No filename was specified for package "%s" project "%s" ref "%s"' % (package, project, ref))
 
-            fail_msg = 'Failed to get package "%s %s" for "%s"' % (package, ref, project)
+            fail_msg = 'Failed to get package "%s" version "%s" for "%s"' % (package, ref, project)
             with _gitlab.wrap_errors(gitlab, fail_msg):
                 proj = gitlab.projects.get(project)
                 packages = proj.packages.list(package_type='generic', package_name=package, package_version=ref, get_all=True)
 
             if len(packages) != 1:
-                raise click.ClickException('More than 1 package with name %s for %s %s' % (package, ref, project))
+                raise click.ClickException('More than 1 package with name "%s" version "%s" for "%s"' % (package, ref, project))
 
-            package = packages[0]
-
-            fail_msg = 'Failed to get file "%s/%s %s" for "%s"' % (package, filename, ref, project)
+            fail_msg = 'Failed to get file "%s" in package "%s" version "%s" for "%s"' % (filename, package, ref, project)
             with _gitlab.wrap_errors(gitlab, fail_msg):
-                files = package.package_files.list(get_all=True)
-                file = next(f for f in files if f.file_name == filename)
+                files = packages[0].package_files.list(get_all=True)
+                try:
+                    file = next(f for f in files if f.file_name == filename)
+                except StopIteration as exc:
+                    raise click.ClickException(fail_msg) from exc
 
-            entry['package_id']= package.id
+            entry['package_id']= packages[0].id
             entry['package_file_id']= file.id
         else:
             raise click.ClickException('Unknown artifact source: "%s"' % (source,))
