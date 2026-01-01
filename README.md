@@ -109,7 +109,7 @@ and not the ZIP archive.
 When the `source` attribute is set to `generic-package`, Art downloads a file from
 GitLab's Generic Package registry. A generic package is a set of files published by
 a project that are identified by a package name and a version. The package itself
-is contains one or more files, each identified by their filename.
+contains one or more files, each identified by their filename.
 
 A `generic-package` source has the following additional `artifacts.yml` attributes:
 |attribute|description|
